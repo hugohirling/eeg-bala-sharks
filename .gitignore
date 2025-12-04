@@ -1,0 +1,70 @@
+# MNE Sample Data
+MNE-sample-data/
+**/MNE-sample-data/
+
+# Python venv
+venv/
+env/
+ENV/
+.venv/
+
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+.temp/
+temp/
+tmp/
+tmput4k8pzd
+
+# Data/Cache
+*.cache
+.cache/
+*.pkl
+*.pickle
+
+# MNE specific
+*.fif
+*.set
+*.cnt
