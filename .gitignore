@@ -63,6 +63,7 @@ tmput4k8pzd
 .cache/
 *.pkl
 *.pickle
+data
 
 # MNE specific
 *.fif

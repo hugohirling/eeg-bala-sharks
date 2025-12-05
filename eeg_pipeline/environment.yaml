@@ -1,0 +1,13 @@
+name: eeg_pipeline
+
+dependencies:
+  - mne=1.3.*
+  - mne-bids
+  - mne-icalabel
+  - autoreject
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
+  - seaborn
+  - scikit-learn
