@@ -30,6 +30,7 @@ def rereference_subject(file_path: Path):
 
     # --- Set montage (if not already set) ---
     raw.set_montage('biosemi64', on_missing='ignore')
+    ToDo() # Check if montage is already set to avoid overwriting
 
     # --- Re-reference to Common Average ---
     eeg_channels = mne.pick_types(raw.info, eeg=True, exclude='bads')
