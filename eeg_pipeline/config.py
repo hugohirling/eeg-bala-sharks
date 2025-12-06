@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 
 # Paths
-
 BASE_DIR = Path(__file__).parent.parent  # EEG_Bala Sharks
 BIDS_ROOT = BASE_DIR / "MNE-sample-data" / "ds006761"
 OUTPUT_DIR = Path("./data")
@@ -15,12 +14,6 @@ SUBJECTS = ["01"]
 # Filter
 FREQ_LOWER = 1.0
 FREQ_UPPER = 40.0
-
-# Referencing
-MASTOID_CHANNELS = {
-    "01": ["1-B32"],
-    "02": ["2-B32"]
-}
 
 # Epoching
 EPOCH_DURATION = 1.0
