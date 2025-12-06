@@ -1,4 +1,4 @@
-# 02_re_reference_common_average.py
+# 04_re_reference_common_average.py
 import mne
 from utils import load_raw, save_raw
 import config
@@ -53,7 +53,7 @@ def rereference_all_subjects():
     """
     for subj in config.SUBJECTS:
         for person in ['P1', 'P2']:
-            file_path = config.OUTPUT_DIR / f"sub-{subj}_{person}_raw.fif"
+            file_path = config.OUTPUT_DIR / f"sub-{subj}_{person}_raw_noisy_cleaned.fif"
             rereference_subject(file_path)
 
 
