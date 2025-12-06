@@ -9,6 +9,8 @@ from utils import save_raw
 def load_data(subject_id):
     bids_path = BIDSPath(subject=subject_id, task="RPS", datatype='eeg', suffix='eeg', root=config.BIDS_ROOT)
     raw = read_raw_bids(bids_path)
+    print(raw.ch_names)
+    print(raw.set_montage("biosemi64"))
 
     # Define channel types
     eeg_channels = [ch for ch in raw.ch_names if ch.startswith(("1-A","1-B","2-A","2-B"))]
