@@ -5,7 +5,7 @@ from pathlib import Path
 # Paths
 BASE_DIR = Path(__file__).parent.parent  # EEG_Bala Sharks
 BIDS_ROOT = BASE_DIR / "MNE-sample-data" / "ds006761"
-OUTPUT_DIR = Path("./data")
+OUTPUT_DIR = BASE_DIR / "data"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Subjects
