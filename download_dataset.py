@@ -7,3 +7,4 @@ dataset = "ds006761"
 
 bids_root = sample.data_path(this_dir) / dataset
 bids_root.mkdir(parents=True, exist_ok=True)
+openneuro.download(dataset=dataset, target_dir=bids_root)
