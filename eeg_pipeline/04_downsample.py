@@ -16,7 +16,7 @@ def process_subject(path_in, path_out):
     raw = load_raw(path_in, preload=True)
 
     # Run down-sampling
-    raw = down_sample_data(raw, 512)
+    raw = down_sample_data(raw, config.DOWNSAMPLE_SFREQ)
 
     # Save annotated raw file
     save_raw(raw, path_out)
