@@ -2,6 +2,7 @@
 from mne_bids import BIDSPath, read_raw_bids
 import config
 from utils import save_raw
+import mne
 
 def load_and_split(subject_id):
     print(f"\n=== Loading subject {subject_id} ===")
@@ -52,12 +53,6 @@ def load_and_split(subject_id):
     raw_p2.set_channel_types({ch: 'bio' for ch in bio_chs_p2})
     raw_p2.set_channel_types({ch: 'temperature' for ch in temp_chs_p2})
     raw_p2.set_channel_types({ch: 'stim' for ch in stim_chs})
-
-    # --- Apply montage to EEG channels only ---
-    print("Setting montage for Person 1")
-    raw_p1.set_montage("biosemi64", on_missing="ignore")
-    print("Setting montage for Person 2")
-    raw_p2.set_montage("biosemi64", on_missing="ignore")
 
     # --- Save outputs ---
     out_p1 = config.OUTPUT_DIR / f"sub-{subject_id}_P1_raw.fif"

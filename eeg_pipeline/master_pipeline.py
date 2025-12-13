@@ -4,6 +4,7 @@ import os
 pipeline_dir = "eeg_pipeline"
 pipeline_steps = [
     "00_load_data_per_person.py",
+    "01_inspect_and_rename.py",
     "01_re-reference_common_average.py",
     "02_filter.py",
     "03_detect_noisy_channels.py",
