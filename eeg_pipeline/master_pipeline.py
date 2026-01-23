@@ -7,9 +7,9 @@ pipeline_steps = [
     "01_inspect_and_rename.py",
     "02_re-reference_common_average.py",
     "03_filter.py",
-    "04_epoching.py",
-    "05_autoreject.py",
-    "06_downsample.py"
+    "04_ica_artifact_removal.py",
+    "05_downsample.py",
+    "06_epoching.py"
     ]
 
 for step in pipeline_steps:
