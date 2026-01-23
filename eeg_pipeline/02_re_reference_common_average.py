@@ -37,7 +37,7 @@ def rereference_subject(file_path: Path):
         print("Re-referenced using Common Average Reference (CAR).")
 
     # --- Save output ---
-    out_file = file_path.with_name(file_path.stem + '_CAR.fif')
+    out_file = file_path.with_name(file_path.stem + '_CAR_raw.fif')
     save_raw(raw, out_file)
     print(f"Saved re-referenced data to {out_file}")
     return out_file
@@ -49,7 +49,7 @@ def rereference_all_subjects():
     """
     for subj in config.SUBJECTS:
         for person in ['P1', 'P2']:
-            file_path = config.OUTPUT_DIR / f"sub-{subj}_{person}_raw_noisy_cleaned.fif"
+            file_path = config.OUTPUT_DIR / f"sub-{subj}_{person}_renamed_raw.fif"
             rereference_subject(file_path)
 
 

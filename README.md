@@ -21,3 +21,7 @@ Step 4 — Rereference
 Step 5 — ICA → ICLabel → Remove bad ICs
 Step 6 — Interpolate removed channels
 ```
+
+
+Question:
+Do I need to add positions while loading? or sometime after?
