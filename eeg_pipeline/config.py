@@ -33,3 +33,7 @@ ICA_MAX_ITER = 500
 
 # Saving format
 SAVE_FORMAT = "fif"  # MNE Standard
+
+# Interbrain Synchrony parameters
+IBS_FMIN = 8     # Alpha band (RPS: attention / anticipation)
+IBS_FMAX = 12
