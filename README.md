@@ -15,11 +15,11 @@ EEG_Bala Sharks
 # Pipeline
 ```
 Step 1 — Load & split
-Step 2 — Filtering
-Step 3 — Detect noisy channels
-Step 4 — Rereference
-Step 5 — ICA → ICLabel → Remove bad ICs
-Step 6 — Interpolate removed channels
+Step 2 - Rename channels
+Step 3 — Filtering
+Step 4 — ICA Labeling
+Step 5 — Downsampling
+Step 6 — Epoching
 ```
 
 
