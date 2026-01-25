@@ -25,3 +25,6 @@ Step 6 — Interpolate removed channels
 
 Question:
 Do I need to add positions while loading? or sometime after?
+
+Question for Tutor Session:
+Should I keep the numbering for each person?
