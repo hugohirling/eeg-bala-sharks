@@ -35,8 +35,8 @@ def process_subject(path_in, path_out):
 if __name__ == "__main__":
     import config
     for subj in config.SUBJECTS:
-        p1 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P1_filtered.fif"
-        p2 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P2_filtered.fif"
+        p1 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P1_downsampled.fif"
+        p2 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P2_downsampled.fif"
 
         out_p1 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P1_epoch.fif"
         out_p2 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P2_epoch.fif"

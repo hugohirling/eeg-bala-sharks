@@ -23,31 +23,49 @@ BIOS64_TO_1020 = {
 }
 
 def inspect_and_rename(subject_id, person):
-    """Load raw data, rename channels from BioSemi64 to 10-20, set montage and save."""
+    """
+    Load raw data, rename EEG channels from BioSemi64 to 10-20,
+    keep EOG/physio channels intact, set montage, and save.
+    """
     raw_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_raw.fif"
     print(f"Loading: {raw_path}")
-    
+
     raw = mne.io.read_raw_fif(raw_path, preload=True)
-    raw_eeg = raw.copy().pick_types(eeg=True)
-    
-    # Remove prefix (e.g., "1-A1" → "A1")
+
+    # ---- Identify EEG channels only ----
+    eeg_picks = mne.pick_types(raw.info, eeg=True)
+    eeg_ch_names = [raw.ch_names[i] for i in eeg_picks]
+
+    # ---- Remove subject prefix ONLY from EEG ----
     prefix = "1-" if person == "P1" else "2-"
-    mapping_prefix = {ch: ch[len(prefix):] for ch in raw_eeg.ch_names if ch.startswith(prefix)}
+    mapping_prefix = {
+        ch: ch[len(prefix):]
+        for ch in eeg_ch_names
+        if ch.startswith(prefix)
+    }
     if mapping_prefix:
-        raw_eeg.rename_channels(mapping_prefix)
-    
-    # Apply BioSemi64 to 10-20 mapping
-    raw_eeg.rename_channels(BIOS64_TO_1020)
-    
-    # Set montage
-    mont = mne.channels.make_standard_montage("biosemi64")
-    raw_eeg.set_montage(mont)
-    
-    # Save processed raw (overwrite if exist)
+        raw.rename_channels(mapping_prefix)
+
+    # ---- Apply BioSemi → 10–20 mapping (EEG ONLY) ----
+    mapping_1020 = {
+        ch: BIOS64_TO_1020[ch]
+        for ch in raw.ch_names
+        if ch in BIOS64_TO_1020
+    }
+    if mapping_1020:
+        raw.rename_channels(mapping_1020)
+
+    # ---- Set montage (EEG only, others ignored safely) ----
+    montage = mne.channels.make_standard_montage("standard_1020")
+    raw.set_montage(montage, match_case=False)
+
+    # ---- Save FULL raw (EEG + EOG + physio + stim) ----
     out_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_renamed_raw.fif"
     print(f"Saving renamed/montaged file to: {out_path}")
-    raw_eeg.save(out_path, overwrite=True)
+    raw.save(out_path, overwrite=True)
+
     return out_path
+
 
 if __name__ == "__main__":
     for subj in config.SUBJECTS:
