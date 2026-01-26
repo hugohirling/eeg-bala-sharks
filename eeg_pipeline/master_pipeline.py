@@ -1,5 +1,6 @@
 import subprocess
 import os
+import sys
 
 pipeline_dir = "eeg_pipeline"
 pipeline_steps = [
@@ -15,5 +16,5 @@ pipeline_steps = [
 for step in pipeline_steps:
     step_path = os.path.join(pipeline_dir, step)
     print(f"Running {step_path} ...")
-    subprocess.run(["python", step_path])
+    subprocess.run([sys.executable, step_path])
     print(f"{step} completed.\n")
