@@ -1,36 +1,60 @@
+import mne
 from pathlib import Path
-from utils import load_raw, save_raw
+import config
+import warnings
+warnings.filterwarnings('ignore')
 
-def down_sample_data(raw, target_sfreq=512):
-    """
-    Apply down-sampling to raw data.
-    """
-    print(f"Down-sampling data to {target_sfreq} Hz")
-    raw.resample(sfreq=target_sfreq)
-    return raw
 
-def process_subject(path_in, path_out):
-    """
-    Load raw EEG, filter channels, and save annotated raw file.
-    """
-    raw = load_raw(path_in, preload=True)
+def downsample(subj, person):
+    """Check/apply downsampling (may already be done in step 00)."""
+    
+    in_path = config.PROCESSED_DATA_DIR / f"sub-{subj}_{person}_ica_raw.fif"
+    out_path = config.PROCESSED_DATA_DIR / f"sub-{subj}_{person}_downsampled_raw.fif"
+    
+    if not in_path.exists():
+        print(f"  File not found: {in_path}")
+        return False
+    
+    print(f"Loading: {in_path}")
+    raw = mne.io.read_raw_fif(in_path, preload=True, verbose=False)
+    
+    current_sfreq = raw.info['sfreq']
+    target_sfreq = config.DOWNSAMPLE_SFREQ
+    
+    print(f"  Current sampling rate: {current_sfreq} Hz")
+    
+    if current_sfreq > target_sfreq:
+        print(f"  Downsampling to {target_sfreq} Hz...")
+        raw.resample(target_sfreq, verbose=False)
+    else:
+        print(f"  Already at target rate ({current_sfreq} Hz), skipping downsample")
+    
+    # Save
+    raw.save(out_path, overwrite=True)
+    print(f"  Saved: {out_path}")
+    
+    return True
 
-    # Run down-sampling
-    raw = down_sample_data(raw, config.DOWNSAMPLE_SFREQ)
-
-    # Save annotated raw file
-    save_raw(raw, path_out)
-
-    print(f"Saved down-sampled-channels file to: {path_out}")
 
 if __name__ == "__main__":
-    import config
+    print("="*60)
+    print("STEP 05: DOWNSAMPLE")
+    print("="*60)
+    
+    success_count = 0
+    fail_count = 0
+    
     for subj in config.SUBJECTS:
-        p1 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P1_ica_cleaned.fif"
-        p2 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P2_ica_cleaned.fif"
-
-        out_p1 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P1_downsampled.fif"
-        out_p2 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P2_downsampled.fif"
-
-        process_subject(p1, out_p1)
-        process_subject(p2, out_p2)
+        for person in ["P1", "P2"]:
+            try:
+                if downsample(subj, person):
+                    success_count += 1
+                else:
+                    fail_count += 1
+            except Exception as e:
+                print(f"  Error for {subj} {person}: {e}")
+                fail_count += 1
+    
+    print("\n" + "="*60)
+    print(f"STEP 05 COMPLETE: {success_count} succeeded, {fail_count} failed")
+    print("="*60)

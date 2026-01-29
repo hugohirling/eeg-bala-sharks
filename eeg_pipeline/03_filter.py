@@ -1,36 +1,67 @@
+import mne
 from pathlib import Path
-from utils import load_raw, save_raw
+import config
+import warnings
+warnings.filterwarnings('ignore')
 
-def filter_data(raw, l_freq, h_freq):
-    """
-    Apply bandpass filter to raw data.
-    """
-    print(f"Applying bandpass filter: {l_freq} - {h_freq} Hz")
-    raw.filter(l_freq=l_freq, h_freq=h_freq)
-    return raw
 
-def process_subject(path_in, path_out):
-    """
-    Load raw EEG, filter channels, and save annotated raw file.
-    """
-    raw = load_raw(path_in, preload=True)
+def filter_data(subj, person):
+    """Apply notch filter and bandpass filter to EEG data."""
+    
+    in_path = config.PROCESSED_DATA_DIR / f"sub-{subj}_{person}_reref_raw.fif"
+    out_path = config.PROCESSED_DATA_DIR / f"sub-{subj}_{person}_filtered_raw.fif"
+    
+    if not in_path.exists():
+        print(f"  File not found: {in_path}")
+        return False
+    
+    print(f"Loading: {in_path}")
+    raw = mne.io.read_raw_fif(in_path, preload=True, verbose=False)
+    
+    # Check for EEG channels
+    eeg_picks = mne.pick_types(raw.info, eeg=True)
+    
+    if len(eeg_picks) == 0:
+        print(f"  Warning: No EEG channels found!")
+        raw.save(out_path, overwrite=True)
+        return True
+    
+    print(f"  Found {len(eeg_picks)} EEG channels")
+    
+    # Apply NOTCH filter for line noise (50 Hz for Europe, 60 Hz for US)
+    print(f"  Applying notch filter at 50 Hz (and harmonics)...")
+    raw.notch_filter(freqs=[50, 100, 150], picks='eeg', verbose=False)
+    
+    # Apply BANDPASS filter
+    print(f"  Applying bandpass filter: {config.FREQ_LOWER} - {config.FREQ_UPPER} Hz")
+    raw.filter(l_freq=config.FREQ_LOWER, h_freq=config.FREQ_UPPER, picks='eeg', verbose=False)
+    
+    # Save
+    raw.save(out_path, overwrite=True)
+    print(f"  Saved: {out_path}")
+    
+    return True
 
-    # Run bandpass filter
-    raw = filter_data(raw, l_freq=config.FREQ_LOWER, h_freq=config.FREQ_UPPER)
-
-    # Save annotated raw file
-    save_raw(raw, path_out)
-
-    print(f"Saved filtered-channels file to: {path_out}")
 
 if __name__ == "__main__":
-    import config
+    print("="*60)
+    print("STEP 03: NOTCH + BANDPASS FILTER")
+    print("="*60)
+    
+    success_count = 0
+    fail_count = 0
+    
     for subj in config.SUBJECTS:
-        p1 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P1_renamed_raw_CAR_raw.fif"
-        p2 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P2_renamed_raw_CAR_raw.fif"
-
-        out_p1 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P1_filtered.fif"
-        out_p2 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P2_filtered.fif"
-
-        process_subject(p1, out_p1)
-        process_subject(p2, out_p2)
+        for person in ["P1", "P2"]:
+            try:
+                if filter_data(subj, person):
+                    success_count += 1
+                else:
+                    fail_count += 1
+            except Exception as e:
+                print(f"  Error for {subj} {person}: {e}")
+                fail_count += 1
+    
+    print("\n" + "="*60)
+    print(f"STEP 03 COMPLETE: {success_count} succeeded, {fail_count} failed")
+    print("="*60)

@@ -1,6 +1,8 @@
 import mne
 from pathlib import Path
 import config
+import warnings
+warnings.filterwarnings('ignore')
 
 # BioSemi64 → Standard 10-20 Mapping
 BIOS64_TO_1020 = {
@@ -22,52 +24,89 @@ BIOS64_TO_1020 = {
     "B31": "PO4", "B32": "O2",
 }
 
-def inspect_and_rename(subject_id, person):
-    """
-    Load raw data, rename EEG channels from BioSemi64 to 10-20,
-    keep EOG/physio channels intact, set montage, and save.
-    """
-    raw_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_raw.fif"
-    print(f"Loading: {raw_path}")
+STANDARD_1020_NAMES = list(BIOS64_TO_1020.values())
 
-    raw = mne.io.read_raw_fif(raw_path, preload=True)
 
-    # ---- Identify EEG channels only ----
-    eeg_picks = mne.pick_types(raw.info, eeg=True)
-    eeg_ch_names = [raw.ch_names[i] for i in eeg_picks]
-
-    # ---- Remove subject prefix ONLY from EEG ----
+def inspect_and_rename(subj, person):
+    """Inspect raw data and rename channels to standard 10-20."""
+    
+    in_path = config.PROCESSED_DATA_DIR / f"sub-{subj}_{person}_raw.fif"
+    out_path = config.PROCESSED_DATA_DIR / f"sub-{subj}_{person}_renamed_raw.fif"
+    
+    if not in_path.exists():
+        print(f"  File not found: {in_path}")
+        return False
+    
+    print(f"Loading: {in_path}")
+    raw = mne.io.read_raw_fif(in_path, preload=False, verbose=False)
+    
+    # Get prefix for this player (e.g., "1-" or "2-")
     prefix = "1-" if person == "P1" else "2-"
-    mapping_prefix = {
-        ch: ch[len(prefix):]
-        for ch in eeg_ch_names
-        if ch.startswith(prefix)
-    }
-    if mapping_prefix:
-        raw.rename_channels(mapping_prefix)
-
-    # ---- Apply BioSemi → 10–20 mapping (EEG ONLY) ----
-    mapping_1020 = {
-        ch: BIOS64_TO_1020[ch]
-        for ch in raw.ch_names
-        if ch in BIOS64_TO_1020
-    }
-    if mapping_1020:
-        raw.rename_channels(mapping_1020)
-
-    # ---- Set montage (EEG only, others ignored safely) ----
-    montage = mne.channels.make_standard_montage("standard_1020")
-    raw.set_montage(montage, match_case=False)
-
-    # ---- Save FULL raw (EEG + EOG + physio + stim) ----
-    out_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_renamed_raw.fif"
-    print(f"Saving renamed/montaged file to: {out_path}")
+    
+    # Build rename mapping for this player's channels
+    rename_map = {}
+    for old_name, new_name in BIOS64_TO_1020.items():
+        full_old = f"{prefix}{old_name}"
+        if full_old in raw.ch_names:
+            rename_map[full_old] = new_name
+    
+    if rename_map:
+        print(f"  Renaming {len(rename_map)} EEG channels...")
+        raw.rename_channels(rename_map)
+    
+    # Now identify EEG vs non-EEG channels after renaming
+    eeg_channels = [ch for ch in raw.ch_names if ch in STANDARD_1020_NAMES]
+    non_eeg_channels = [ch for ch in raw.ch_names if ch not in STANDARD_1020_NAMES]
+    
+    # Set channel types explicitly
+    print(f"  Setting {len(eeg_channels)} channels as EEG type")
+    raw.set_channel_types({ch: 'eeg' for ch in eeg_channels})
+    
+    if non_eeg_channels:
+        print(f"  Setting {len(non_eeg_channels)} channels as misc type")
+        # Handle stim channel separately
+        for ch in non_eeg_channels:
+            if 'Status' in ch or 'STI' in ch:
+                raw.set_channel_types({ch: 'stim'})
+            else:
+                raw.set_channel_types({ch: 'misc'})
+    
+    # Set montage for EEG channels
+    if eeg_channels:
+        montage = mne.channels.make_standard_montage('standard_1020')
+        raw.set_montage(montage, match_case=False, on_missing='ignore')
+        print(f"  Montage set for {len(eeg_channels)} EEG channels")
+    
+    # Load data for saving
+    print(f"  Loading data into memory...")
+    raw.load_data()
+    
+    # Save
     raw.save(out_path, overwrite=True)
-
-    return out_path
+    print(f"  Saved: {out_path}")
+    
+    return True
 
 
 if __name__ == "__main__":
+    print("="*60)
+    print("STEP 01: INSPECT AND RENAME CHANNELS")
+    print("="*60)
+    
+    success_count = 0
+    fail_count = 0
+    
     for subj in config.SUBJECTS:
         for person in ["P1", "P2"]:
-            inspect_and_rename(subj, person)
+            try:
+                if inspect_and_rename(subj, person):
+                    success_count += 1
+                else:
+                    fail_count += 1
+            except Exception as e:
+                print(f"  Error for {subj} {person}: {e}")
+                fail_count += 1
+    
+    print("\n" + "="*60)
+    print(f"STEP 01 COMPLETE: {success_count} succeeded, {fail_count} failed")
+    print("="*60)

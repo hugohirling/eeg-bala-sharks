@@ -1,71 +1,98 @@
-# 01_load_data.py
+"""
+Step 00: Load and split hyperscanning data per person.
+Downsamples immediately to reduce memory usage.
+"""
+
+import mne
 from mne_bids import BIDSPath, read_raw_bids
 import config
-from utils import save_raw
-import mne
+import warnings
+warnings.filterwarnings('ignore')
 
-def load_and_split(subject_id):
-    print(f"\n=== Loading subject {subject_id} ===")
+
+def load_and_split(subj):
+    """Load BIDS data, split into two participants, and downsample immediately."""
+    print(f"\n=== Loading subject {subj} ===")
     
-    # --- Load raw data from BIDS ---
     bids_path = BIDSPath(
-        subject=subject_id,
-        task="RPS",
+        subject=subj,
+        task=config.TASK,
         datatype='eeg',
-        suffix='eeg',
         root=config.BIDS_ROOT
     )
-    raw = read_raw_bids(bids_path, verbose=False)
+    
+    try:
+        raw = read_raw_bids(bids_path, verbose=False)
+    except Exception as e:
+        print(f"  Error loading {subj}: {e}")
+        return False
+    
+    # Get all channel names
+    all_chs = raw.ch_names
+    
+    # Find channels for each player dynamically
+    p1_chs = [ch for ch in all_chs if ch.startswith('1-')]
+    p2_chs = [ch for ch in all_chs if ch.startswith('2-')]
+    stim_chs = [ch for ch in all_chs if 'Status' in ch or 'STI' in ch]
+    
+    if not p1_chs or not p2_chs:
+        print(f"  Warning: Missing player channels for {subj}")
+        return False
+    
+    print(f"  Found {len(p1_chs)} P1 channels, {len(p2_chs)} P2 channels")
+    print(f"  Original sampling rate: {raw.info['sfreq']} Hz")
+    
+    # Downsample BEFORE splitting to reduce memory
+    print(f"  Downsampling to {config.DOWNSAMPLE_SFREQ} Hz (memory optimization)...")
+    raw.load_data()
+    raw.resample(config.DOWNSAMPLE_SFREQ, verbose=False)
+    
+    # Now split into P1 and P2
+    for person, p_chs in [("P1", p1_chs), ("P2", p2_chs)]:
+        print(f"  Processing {person}...")
+        
+        # Pick channels for this player
+        raw_p = raw.copy().pick(p_chs + stim_chs)
+        
+        # Set channel types
+        for ch in raw_p.ch_names:
+            if 'Temp' in ch:
+                raw_p.set_channel_types({ch: 'misc'})
+            elif 'Erg' in ch or 'Resp' in ch or 'Plet' in ch:
+                raw_p.set_channel_types({ch: 'misc'})
+            elif 'Status' in ch:
+                raw_p.set_channel_types({ch: 'stim'})
+        
+        # Save
+        out_path = config.PROCESSED_DATA_DIR / f"sub-{subj}_{person}_raw.fif"
+        raw_p.save(out_path, overwrite=True)
+        print(f"  Saved: {out_path}")
+        
+        # Free memory
+        del raw_p
+    
+    del raw
+    return True
 
-    # --- Define channel groups ---
-    eeg_chs_p1 = [ch for ch in raw.ch_names if ch.startswith(("1-A","1-B"))]
-    eeg_chs_p2 = [ch for ch in raw.ch_names if ch.startswith(("2-A","2-B"))]
-
-    eog_chs_p1 = ['1-Erg1', '1-Erg2']
-    eog_chs_p2 = ['2-Erg1', '2-Erg2']
-
-    resp_chs_p1 = ['1-Resp']
-    resp_chs_p2 = ['2-Resp']
-
-    bio_chs_p1 = ['1-Plet']
-    bio_chs_p2 = ['2-Plet']
-
-    temp_chs_p1 = ['1-Temp']
-    temp_chs_p2 = ['2-Temp']
-
-    stim_chs = ['Status']  # bleibt gleich für beide
-
-    # --- Split raw per person ---
-    raw_p1 = raw.copy().pick_channels(eeg_chs_p1 + eog_chs_p1 + resp_chs_p1 + bio_chs_p1 + temp_chs_p1 + stim_chs)
-    raw_p2 = raw.copy().pick_channels(eeg_chs_p2 + eog_chs_p2 + resp_chs_p2 + bio_chs_p2 + temp_chs_p2 + stim_chs)
-
-    # --- Set channel types ---
-    raw_p1.set_channel_types({ch: 'eeg' for ch in eeg_chs_p1})
-    raw_p1.set_channel_types({ch: 'eog' for ch in eog_chs_p1})
-    raw_p1.set_channel_types({ch: 'resp' for ch in resp_chs_p1})
-    raw_p1.set_channel_types({ch: 'bio' for ch in bio_chs_p1})
-    raw_p1.set_channel_types({ch: 'temperature' for ch in temp_chs_p1})
-    raw_p1.set_channel_types({ch: 'stim' for ch in stim_chs})
-
-    raw_p2.set_channel_types({ch: 'eeg' for ch in eeg_chs_p2})
-    raw_p2.set_channel_types({ch: 'eog' for ch in eog_chs_p2})
-    raw_p2.set_channel_types({ch: 'resp' for ch in resp_chs_p2})
-    raw_p2.set_channel_types({ch: 'bio' for ch in bio_chs_p2})
-    raw_p2.set_channel_types({ch: 'temperature' for ch in temp_chs_p2})
-    raw_p2.set_channel_types({ch: 'stim' for ch in stim_chs})
-
-    # --- Save outputs ---
-    out_p1 = config.OUTPUT_DIR / f"sub-{subject_id}_P1_raw.fif"
-    out_p2 = config.OUTPUT_DIR / f"sub-{subject_id}_P2_raw.fif"
-
-    save_raw(raw_p1, out_p1)
-    save_raw(raw_p2, out_p2)
-
-    print(f"Saved Person 1: {out_p1}")
-    print(f"Saved Person 2: {out_p2}")
-
-    return out_p1, out_p2
 
 if __name__ == "__main__":
+    print("="*60)
+    print("STEP 00: LOAD DATA PER PERSON (WITH DOWNSAMPLING)")
+    print("="*60)
+    
+    success_count = 0
+    fail_count = 0
+    
     for subj in config.SUBJECTS:
-        load_and_split(subj)
+        try:
+            if load_and_split(subj):
+                success_count += 1
+            else:
+                fail_count += 1
+        except Exception as e:
+            print(f"  Unexpected error for {subj}: {e}")
+            fail_count += 1
+    
+    print("\n" + "="*60)
+    print(f"STEP 00 COMPLETE: {success_count} succeeded, {fail_count} failed")
+    print("="*60)
