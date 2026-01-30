@@ -28,3 +28,4 @@ Do I need to add positions while loading? or sometime after?
 
 Question for Tutor Session:
 Should I keep the numbering for each person?
+Is there any steps missing in our pipeline? (Would we need some other additional steps?)

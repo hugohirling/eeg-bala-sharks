@@ -8,8 +8,8 @@ BIDS_ROOT = BASE_DIR / "MNE-sample-data" / "ds006761"
 OUTPUT_DIR = BASE_DIR / "data"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Subjects
-SUBJECTS = ["01"]
+# Subjects (default: sub-01 .. sub-34)
+SUBJECTS = [f"{i:02d}" for i in range(1, 35)]
 
 # Filter
 FREQ_LOWER = 1.0
