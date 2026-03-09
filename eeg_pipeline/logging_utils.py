@@ -6,6 +6,8 @@ This module handles:
 - Python logging configuration
 - Capturing and routing MNE library output
 - Custom log messaging with timestamp and elapsed time tracking
+
+The logging and comments in this script were created with the assistance of AI (VS Code Copilot).
 """
 
 import logging

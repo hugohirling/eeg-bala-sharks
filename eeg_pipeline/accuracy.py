@@ -8,8 +8,17 @@ This script implements two approaches for training time-resolved LDA decoders:
 The script supports RAM-efficient chunked processing and provides a Rich terminal UI
 with live progress bars and log panels.
 
-Author: [Your Name]
+Data saving/loading feature:
+- After processing subjects, data is automatically saved to pickle files
+- Use --data-file flag to load pre-processed data instead of re-processing subjects
+- Use --option to select which analysis to run (1, 2, or compare)
+- Results are automatically plotted with decoding accuracy over time
+- Use --no-plot to disable plotting for headless environments
+
+Author: Hugo Hirling
 Date: 2026-02-18
+
+The logging and comments in this script were created with the assistance of AI (VS Code Copilot).
 """
 
 # ============================================================================
@@ -20,6 +29,8 @@ import os
 import gc
 from pathlib import Path
 from typing import List, Tuple
+import argparse
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -28,7 +39,8 @@ import time
 from mne_bids import BIDSPath
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import StratifiedKFold
-import matplotlib.pyplot as plt
+# plotting moved to plotting_utils
+
 
 # Local imports
 import config
@@ -41,6 +53,14 @@ from logging_utils import (
     LogRenderable,
     RICH_AVAILABLE,
 )
+from plotting_utils import (
+    plot_decoding_accuracy,
+    save_plot_data,
+    load_plot_data,
+    plot_only,
+    plot_comparison,
+)
+
 
 # ============================================================================
 # CONFIGURATION & CONSTANTS
@@ -129,9 +149,12 @@ def load_refactor_split_data(subject: str, only_p1: bool = True):
     remove_prefix_and_rename(raw_p1, "2-")
     if raw_p2 is not None:
         remove_prefix_and_rename(raw_p2, "1-")
+
+    raw_p1.pick_channels([ch for ch in raw_p1.ch_names if ch in config.channel_labels.keys()])
     
     raw_p1.rename_channels(config.channel_labels)
     if raw_p2 is not None:
+        raw_p2.pick_channels([ch for ch in raw_p2.ch_names if ch in config.channel_labels.keys()])
         raw_p2.rename_channels(config.channel_labels)
     terminal_log("  Renamed channels to canonical labels")
     
@@ -283,7 +306,8 @@ def sliding_estimator(X: np.ndarray, Y: np.ndarray) -> np.ndarray:
     time_decod = mne.decoding.SlidingEstimator(clf, n_jobs=1, scoring="accuracy")
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     
-    scores = mne.decoding.cross_val_multiscore(time_decod, X, Y, cv=cv, n_jobs=1)
+    with redirect_streams():
+        scores = mne.decoding.cross_val_multiscore(time_decod, X, Y, cv=cv, n_jobs=1)
     mean_scores = scores.mean(axis=0)
     
     return mean_scores
@@ -334,7 +358,8 @@ def sliding_estimator_chunked(
         cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
         
         terminal_log(f"  Processing timepoints {start_time:4d}-{end_time:4d}...")
-        scores_chunk = mne.decoding.cross_val_multiscore(time_decod, X_chunk, Y_combined, cv=cv, n_jobs=1)
+        with redirect_streams():
+            scores_chunk = mne.decoding.cross_val_multiscore(time_decod, X_chunk, Y_combined, cv=cv, n_jobs=1)
         scores_all.append(scores_chunk.mean(axis=0))
         
         # Memory cleanup
@@ -378,22 +403,58 @@ def sliding_estimator_combined(
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     
     terminal_log("  Training combined model with cross-validation...")
-    scores = mne.decoding.cross_val_multiscore(time_decod, X_combined, Y_combined, cv=cv, n_jobs=1)
+    with redirect_streams():
+        scores = mne.decoding.cross_val_multiscore(time_decod, X_combined, Y_combined, cv=cv, n_jobs=1)
     mean_scores = scores.mean(axis=0)
     
     return mean_scores
+
+
+def save_processed_data(data: dict, filepath: str):
+    """
+    Save processed EEG data to a pickle file.
+    
+    Args:
+        data (dict): Dictionary containing the processed data
+        filepath (str): Path to save the data
+    """
+    terminal_log(f"Saving processed data to {filepath}...")
+    with open(filepath, 'wb') as f:
+        pickle.dump(data, f)
+    terminal_log("Data saved successfully.")
+
+
+def load_processed_data(filepath: str) -> dict:
+    """
+    Load processed EEG data from a pickle file.
+    
+    Args:
+        filepath (str): Path to the saved data file
+    
+    Returns:
+        dict: Dictionary containing the processed data
+    """
+    terminal_log(f"Loading processed data from {filepath}...")
+    with open(filepath, 'rb') as f:
+        data = pickle.load(f)
+    terminal_log("Data loaded successfully.")
+    return data
 
 
 # ============================================================================
 # MAIN PIPELINE ORCHESTRATION
 # ============================================================================
 
-def main_option1_individual():
+def main_option1_individual(data_file: str = None, show_plot: bool = True):
     """
     Option 1: Train individual LDA models per subject, then average results.
     
     This approach trains a separate decoder for each subject and then averages
     the decoding accuracies across subjects.
+    
+    Args:
+        data_file (str): Path to saved data file. If provided, load data from file instead of processing subjects.
+        show_plot (bool): Whether to display the decoding accuracy plot.
     """
     
     terminal_log("=" * 60)
@@ -404,71 +465,121 @@ def main_option1_individual():
     all_scores = []
     times = None
     
-    if RICH_AVAILABLE:
-        with get_live_display() as live:
-            with get_progress_bar() as progress:
-                task = progress.add_task("Train individual models", total=len(SUBJECTS), eta="")
-                subject_times: List[float] = []
-                
-                for i, subject in enumerate(SUBJECTS):
-                    t0 = time.time()
-                    raw_p1 = load_refactor_split_data(subject, only_p1=True)
-                    events, event_id, behav = create_events(subject)
-                    (X_decision, times), _, _, Y = create_epochs(raw_p1, events, event_id, behav)
+    if data_file and os.path.exists(data_file):
+        # Load from saved data
+        saved_data = load_processed_data(data_file)
+        subject_data = saved_data['option1_data']
+        times = saved_data['times']
+        
+        if RICH_AVAILABLE:
+            with get_live_display() as live:
+                with get_progress_bar() as progress:
+                    task = progress.add_task("Process saved data", total=len(subject_data), eta="")
                     
-                    mean_scores = sliding_estimator(X_decision, Y)
-                    all_scores.append(mean_scores)
-
-                    # record timing and update ETA field based on mean per-subject time
-                    elapsed = time.time() - t0
-                    subject_times.append(elapsed)
-                    mean_time = float(np.mean(subject_times))
-                    remaining = len(SUBJECTS) - (i + 1)
-                    eta_seconds = int(mean_time * remaining)
-                    hh = eta_seconds // 3600
-                    mm = (eta_seconds % 3600) // 60
-                    ss = eta_seconds % 60
-                    eta_str = f"{hh:02d}:{mm:02d}:{ss:02d}"
-                    # Advance the progress and set an artificial start time
-                    # based on observed mean per-subject time so Rich can
-                    # estimate TimeRemainingColumn.
-                    progress.update(task, advance=1)
-                    try:
-                        task_obj = progress.get_task(task)
-                        # prefer attribute names that exist across rich versions
-                        started_attr = None
-                        if hasattr(task_obj, "start_time"):
-                            started_attr = "start_time"
-                        elif hasattr(task_obj, "started_at"):
-                            started_attr = "started_at"
-                        if started_attr is not None:
-                            # pretend the task started earlier by mean_time*(completed)
-                            setattr(task_obj, started_attr, time.time() - mean_time * (i + 1))
-                    except Exception:
-                        pass
-                    live.refresh()
+                    for i, (X_decision, Y) in enumerate(subject_data):
+                        mean_scores = sliding_estimator(X_decision, Y)
+                        all_scores.append(mean_scores)
+                        progress.update(task, advance=1)
+                        live.refresh()
+        else:
+            for X_decision, Y in subject_data:
+                mean_scores = sliding_estimator(X_decision, Y)
+                all_scores.append(mean_scores)
     else:
-        for subject in SUBJECTS:
-            raw_p1 = load_refactor_split_data(subject, only_p1=True)
-            events, event_id, behav = create_events(subject)
-            (X_decision, times), _, _, Y = create_epochs(raw_p1, events, event_id, behav)
-            
-            mean_scores = sliding_estimator(X_decision, Y)
-            all_scores.append(mean_scores)
+        # Process subjects normally
+        subject_data = []
+        
+        if RICH_AVAILABLE:
+            with get_live_display() as live:
+                with get_progress_bar() as progress:
+                    task = progress.add_task("Train individual models", total=len(SUBJECTS), eta="")
+                    subject_times: List[float] = []
+                    
+                    for i, subject in enumerate(SUBJECTS):
+                        t0 = time.time()
+                        raw_p1 = load_refactor_split_data(subject, only_p1=True)
+                        events, event_id, behav = create_events(subject)
+                        (X_decision, times), _, _, Y = create_epochs(raw_p1, events, event_id, behav)
+                        
+                        # Store data for potential saving
+                        subject_data.append((X_decision, Y))
+                        
+                        mean_scores = sliding_estimator(X_decision, Y)
+                        all_scores.append(mean_scores)
+
+                        # record timing and update ETA field based on mean per-subject time
+                        elapsed = time.time() - t0
+                        subject_times.append(elapsed)
+                        mean_time = float(np.mean(subject_times))
+                        remaining = len(SUBJECTS) - (i + 1)
+                        eta_seconds = int(mean_time * remaining)
+                        hh = eta_seconds // 3600
+                        mm = (eta_seconds % 3600) // 60
+                        ss = eta_seconds % 60
+                        eta_str = f"{hh:02d}:{mm:02d}:{ss:02d}"
+                        # Advance the progress and set an artificial start time
+                        # based on observed mean per-subject time so Rich can
+                        # estimate TimeRemainingColumn.
+                        progress.update(task, advance=1)
+                        try:
+                            task_obj = progress.get_task(task)
+                            # prefer attribute names that exist across rich versions
+                            started_attr = None
+                            if hasattr(task_obj, "start_time"):
+                                started_attr = "start_time"
+                            elif hasattr(task_obj, "started_at"):
+                                started_attr = "started_at"
+                            if started_attr is not None:
+                                # pretend the task started earlier by mean_time*(completed)
+                                setattr(task_obj, started_attr, time.time() - mean_time * (i + 1))
+                        except Exception:
+                            pass
+                        live.refresh()
+        else:
+            for subject in SUBJECTS:
+                raw_p1 = load_refactor_split_data(subject, only_p1=True)
+                events, event_id, behav = create_events(subject)
+                (X_decision, times), _, _, Y = create_epochs(raw_p1, events, event_id, behav)
+                
+                # Store data for potential saving
+                subject_data.append((X_decision, Y))
+                
+                mean_scores = sliding_estimator(X_decision, Y)
+                all_scores.append(mean_scores)
+        
+        # Save processed data if no data_file was provided (normal run)
+        if data_file is None:
+            save_data = {
+                'option1_data': subject_data,
+                'times': times,
+                'subjects': SUBJECTS
+            }
+            save_processed_data(save_data, 'processed_data_option1.pkl')
     
     # Average across subjects
     mean_scores_avg = np.mean(all_scores, axis=0)
     
     terminal_log(f"\nCompleted Option 1: Mean accuracy = {mean_scores_avg.mean():.3f}")
+    
+    # Save plot data
+    save_plot_data(times, mean_scores_avg, 'plot_data_option1.pkl')
+    
+    # Plot results
+    plot_decoding_accuracy(times, mean_scores_avg, "Option 1: Averaged Individual Models", show_plot)
+    
     return times, mean_scores_avg
 
 
-def main_option2_combined():
+def main_option2_combined(data_file: str = None, show_plot: bool = True):
     """
     Option 2: Train a single LDA model on data combined across all subjects.
     
     This approach concatenates data from all subjects and trains a single decoder.
     It uses chunked processing if the total data size exceeds the RAM threshold.
+    
+    Args:
+        data_file (str): Path to saved data file. If provided, load data from file instead of processing subjects.
+        show_plot (bool): Whether to display the decoding accuracy plot.
     """
     
     terminal_log("=" * 60)
@@ -480,49 +591,78 @@ def main_option2_combined():
     Y_list = []
     times = None
     
+    if data_file and os.path.exists(data_file):
+        # Load from saved data
+        saved_data = load_processed_data(data_file)
+        X_list = saved_data['X_list']
+        Y_list = saved_data['Y_list']
+        times = saved_data['times']
+    else:
+        # Process subjects normally
+        if RICH_AVAILABLE:
+            with get_live_display() as live:
+                with get_progress_bar() as progress:
+                    
+                    # Load subjects
+                    task_load = progress.add_task("Load subjects", total=len(SUBJECTS), eta="")
+                    load_times: List[float] = []
+                    for i, subject in enumerate(SUBJECTS):
+                        t0 = time.time()
+                        raw_p1 = load_refactor_split_data(subject, only_p1=True)
+                        events, event_id, behav = create_events(subject)
+                        (X_decision, times), _, _, Y = create_epochs(raw_p1, events, event_id, behav)
+                        X_list.append(X_decision)
+                        Y_list.append(Y)
+
+                        elapsed = time.time() - t0
+                        load_times.append(elapsed)
+                        mean_time = float(np.mean(load_times))
+                        remaining = len(SUBJECTS) - (i + 1)
+                        eta_seconds = int(mean_time * remaining)
+                        hh = eta_seconds // 3600
+                        mm = (eta_seconds % 3600) // 60
+                        ss = eta_seconds % 60
+                        eta_str = f"{hh:02d}:{mm:02d}:{ss:02d}"
+                        progress.update(task_load, advance=1)
+                        try:
+                            task_obj = progress.get_task(task_load)
+                            started_attr = None
+                            if hasattr(task_obj, "start_time"):
+                                started_attr = "start_time"
+                            elif hasattr(task_obj, "started_at"):
+                                started_attr = "started_at"
+                            if started_attr is not None:
+                                setattr(task_obj, started_attr, time.time() - mean_time * (i + 1))
+                        except Exception:
+                            pass
+                        live.refresh()
+        else:
+            # Fallback without Rich
+            for subject in SUBJECTS:
+                raw_p1 = load_refactor_split_data(subject, only_p1=True)
+                events, event_id, behav = create_events(subject)
+                (X_decision, times), _, _, Y = create_epochs(raw_p1, events, event_id, behav)
+                X_list.append(X_decision)
+                Y_list.append(Y)
+        
+        # Save processed data if no data_file was provided (normal run)
+        if data_file is None:
+            save_data = {
+                'X_list': X_list,
+                'Y_list': Y_list,
+                'times': times,
+                'subjects': SUBJECTS
+            }
+            save_processed_data(save_data, 'processed_data_option2.pkl')
+    
+    # Estimate memory and decide on chunking strategy
+    total_size_gb = sum(X.nbytes for X in X_list) / (1024 ** 3)
+    terminal_log(f"\nEstimated total data size: {total_size_gb:.2f} GB")
+    
+    # Train combined model
     if RICH_AVAILABLE:
         with get_live_display() as live:
             with get_progress_bar() as progress:
-                
-                # Load subjects
-                task_load = progress.add_task("Load subjects", total=len(SUBJECTS), eta="")
-                load_times: List[float] = []
-                for i, subject in enumerate(SUBJECTS):
-                    t0 = time.time()
-                    raw_p1 = load_refactor_split_data(subject, only_p1=True)
-                    events, event_id, behav = create_events(subject)
-                    (X_decision, times), _, _, Y = create_epochs(raw_p1, events, event_id, behav)
-                    X_list.append(X_decision)
-                    Y_list.append(Y)
-
-                    elapsed = time.time() - t0
-                    load_times.append(elapsed)
-                    mean_time = float(np.mean(load_times))
-                    remaining = len(SUBJECTS) - (i + 1)
-                    eta_seconds = int(mean_time * remaining)
-                    hh = eta_seconds // 3600
-                    mm = (eta_seconds % 3600) // 60
-                    ss = eta_seconds % 60
-                    eta_str = f"{hh:02d}:{mm:02d}:{ss:02d}"
-                    progress.update(task_load, advance=1)
-                    try:
-                        task_obj = progress.get_task(task_load)
-                        started_attr = None
-                        if hasattr(task_obj, "start_time"):
-                            started_attr = "start_time"
-                        elif hasattr(task_obj, "started_at"):
-                            started_attr = "started_at"
-                        if started_attr is not None:
-                            setattr(task_obj, started_attr, time.time() - mean_time * (i + 1))
-                    except Exception:
-                        pass
-                    live.refresh()
-                
-                # Estimate memory and decide on chunking strategy
-                total_size_gb = sum(X.nbytes for X in X_list) / (1024 ** 3)
-                terminal_log(f"\nEstimated total data size: {total_size_gb:.2f} GB")
-                
-                # Train combined model
                 task_train = progress.add_task("Train combined model", total=1)
                 if total_size_gb > RAM_THRESHOLD_GB:
                     terminal_log(f"Data exceeds {RAM_THRESHOLD_GB} GB threshold → using chunked processing")
@@ -533,17 +673,6 @@ def main_option2_combined():
                 progress.advance(task_train)
                 live.refresh()
     else:
-        # Fallback without Rich
-        for subject in SUBJECTS:
-            raw_p1 = load_refactor_split_data(subject, only_p1=True)
-            events, event_id, behav = create_events(subject)
-            (X_decision, times), _, _, Y = create_epochs(raw_p1, events, event_id, behav)
-            X_list.append(X_decision)
-            Y_list.append(Y)
-        
-        total_size_gb = sum(X.nbytes for X in X_list) / (1024 ** 3)
-        terminal_log(f"Estimated total data size: {total_size_gb:.2f} GB")
-        
         if total_size_gb > RAM_THRESHOLD_GB:
             terminal_log(f"Data exceeds {RAM_THRESHOLD_GB} GB → using chunked processing")
             mean_scores_combined = sliding_estimator_chunked(X_list, Y_list, chunk_size=500)
@@ -552,14 +681,26 @@ def main_option2_combined():
             mean_scores_combined = sliding_estimator_combined(X_list, Y_list)
     
     terminal_log(f"\nCompleted Option 2: Mean accuracy = {mean_scores_combined.mean():.3f}")
+    
+    # Save plot data
+    save_plot_data(times, mean_scores_combined, 'plot_data_option2.pkl')
+    
+    # Plot results
+    plot_decoding_accuracy(times, mean_scores_combined, "Option 2: Combined Model", show_plot)
+    
     return times, mean_scores_combined
 
 
-def compare_both_options():
+def compare_both_options(data_file_option1: str = None, data_file_option2: str = None, show_plot: bool = True):
     """
     Compare Option 1 (individual models, then averaged) with Option 2 (combined model).
     
     Trains both approaches and visualizes the comparison.
+    
+    Args:
+        data_file_option1 (str): Path to saved data file for option 1
+        data_file_option2 (str): Path to saved data file for option 2
+        show_plot (bool): Whether to display the plots.
     """
     
     terminal_log("=" * 60)
@@ -569,40 +710,18 @@ def compare_both_options():
     
     # Option 1
     terminal_log("\n[Option 1] Training individual models...")
-    times_opt1, scores_opt1 = main_option1_individual()
+    times_opt1, scores_opt1 = main_option1_individual(data_file_option1, show_plot)
     
     # Option 2
     terminal_log("\n[Option 2] Training combined model...")
-    times_opt2, scores_opt2 = main_option2_combined()
+    times_opt2, scores_opt2 = main_option2_combined(data_file_option2, show_plot)
     
-    # Interpolate to common time axis for fair comparison
-    common_times = np.linspace(0, min(times_opt1[-1], times_opt2[-1]), len(times_opt1))
-    scores_opt1_interp = np.interp(common_times, times_opt1, scores_opt1)
-    scores_opt2_interp = np.interp(common_times, times_opt2, scores_opt2)
-    
-    # Plot comparison
+    # Use shared plotting helper for comparison (handles interpolation & stats)
     terminal_log("\nGenerating comparison plot...")
-    plt.figure(figsize=(14, 6))
-    plt.plot(common_times, scores_opt1_interp, linewidth=2, color="blue", 
-             label="Option 1: Averaged Individual Models", marker='o', markersize=3, alpha=0.7)
-    plt.plot(common_times, scores_opt2_interp, linewidth=2, color="red", 
-             label="Option 2: Combined Model", marker='s', markersize=3, alpha=0.7)
-    plt.axhline(1/3, color="k", linestyle="--", label="Chance level (33%)")
-    plt.xlabel("Time (s)")
-    plt.ylabel("Decoding Accuracy")
-    plt.title("Comparison: Individual Models (averaged) vs Combined Model")
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.show()
-    
-    # Print statistics
-    terminal_log("\n" + "=" * 60)
-    terminal_log("STATISTICS:")
-    terminal_log("=" * 60)
-    terminal_log(f"Option 1 — Mean: {scores_opt1_interp.mean():.4f}, Std: {scores_opt1_interp.std():.4f}")
-    terminal_log(f"Option 2 — Mean: {scores_opt2_interp.mean():.4f}, Std: {scores_opt2_interp.std():.4f}")
-    terminal_log(f"Difference: {abs(scores_opt1_interp.mean() - scores_opt2_interp.mean()):.4f}")
+    plot_comparison(times_opt1, scores_opt1, times_opt2, scores_opt2, 
+                    title="Comparison: Individual Models (averaged) vs Combined Model", 
+                    show_plot=show_plot)
+
 
 
 # ============================================================================
@@ -610,13 +729,39 @@ def compare_both_options():
 # ============================================================================
 
 if __name__ == "__main__":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="EEG Decoding Pipeline")
+    parser.add_argument("--data-file", type=str, help="Path to saved processed data file")
+    parser.add_argument("--option", type=str, choices=["1", "2", "compare"], default="2",
+                       help="Which option to run: 1 (individual), 2 (combined), compare (both)")
+    parser.add_argument("--no-plot", action="store_true", help="Disable plotting of results")
+    parser.add_argument("--plot-only", action="store_true", help="Skip calculations and only plot saved results")
+    parser.add_argument("--plot-file", type=str, default="plot_data", 
+                       help="File prefix for plot data when using --plot-only (default: plot_data)")
+    
+    args = parser.parse_args()
+    
     # Initialize logging
     init_logging()
     
     terminal_log("EEG Decoding Pipeline: Starting...")
     terminal_log(f"Configuration: {len(SUBJECTS)} subjects, {len(COMMON_CHANNELS)} channels")
     
-    # Run Option 2 (change to main_option1_individual() or compare_both_options() as needed)
-    main_option2_combined()
+    # Handle plot-only mode
+    if args.plot_only:
+        plot_only(args.option, args.plot_file)
+    else:
+        show_plot = not args.no_plot
+        
+        # Run selected option
+        if args.option == "1":
+            main_option1_individual(args.data_file, show_plot)
+        elif args.option == "2":
+            main_option2_combined(args.data_file, show_plot)
+        elif args.option == "compare":
+            # For comparison, try to load saved data if available
+            data_file_option1 = "processed_data_option1.pkl" if os.path.exists("processed_data_option1.pkl") else None
+            data_file_option2 = "processed_data_option2.pkl" if os.path.exists("processed_data_option2.pkl") else None
+            compare_both_options(data_file_option1, data_file_option2, show_plot)
     
     terminal_log("\nPipeline completed.")
