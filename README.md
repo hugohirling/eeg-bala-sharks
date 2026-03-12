@@ -38,4 +38,9 @@ Notes 120326 - Tutor Meeting:
 - bad channel detection etc. before the output
 - cleaned data before interpreting
 - we might have uncleaned data for example if subject is blinking a lot -> output might look different than expected
-- 
+- position mapping of the renaming might be different? -> authors have some coordinates we have to check (Hugo has done some work on this) VERY IMPORTANT for the topoplots!!!!
+- rereferencing/filter: when is it good -> power spectrum plot doesn't look too different -> data doesn't get too distorted (if needed look at papers for good rereferencing/filtering)
+- ica: rejection criteria -> colorful plots a good sign (look into lecture how to interpret ica plots)
+- bad channels to clean data (some measure) further before ica even!!!
+- ica before encoding (ica is useful to remove blinks and eye movements) - for our case it matters since we use all channels to decode to clean eye movement and bad channels
+- original authors code: switched around the prefixes! (Hugo has done this in his script)
