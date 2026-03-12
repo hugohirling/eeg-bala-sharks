@@ -44,3 +44,8 @@ Notes 120326 - Tutor Meeting:
 - bad channels to clean data (some measure) further before ica even!!!
 - ica before encoding (ica is useful to remove blinks and eye movements) - for our case it matters since we use all channels to decode to clean eye movement and bad channels
 - original authors code: switched around the prefixes! (Hugo has done this in his script)
+- scope of project: add some other analysis since we drop feedback and reaction phase -> to add to report
+- try a different type of classifier was a feedback of the last tutor meeting 
+
+- highly suggest adding more analysis for the scope
+- general comment: try to document a lot for the code and report
