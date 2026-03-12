@@ -48,4 +48,4 @@ Notes 120326 - Tutor Meeting:
 - try a different type of classifier was a feedback of the last tutor meeting 
 
 - highly suggest adding more analysis for the scope
-- general comment: try to document a lot for the code and report
+- general comment: try to document a lot for the code and report (write about important things, put the sanity checks in and so on, what we find interesting, swapping labels and so on -> a year from now you need to talk about this as a basis for a report)
