@@ -69,3 +69,7 @@ tmput4k8pzd
 *.set
 *.cnt
 *.npy
+
+# Other data files
+*.tsv
+*.png

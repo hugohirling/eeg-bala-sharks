@@ -7,6 +7,7 @@ BASE_DIR = Path(__file__).parent.parent  # EEG_Bala Sharks
 BIDS_ROOT = BASE_DIR / "MNE-sample-data" / "ds006761"
 OUTPUT_DIR = BASE_DIR / "data"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+BIOSEMI64_MAT_PATH = BASE_DIR / "biosemi64.mat"
 
 # Subjects
 SUBJECTS = ["01"]
@@ -17,6 +18,23 @@ FREQ_UPPER = 40.0
 
 #Downsampling
 DOWNSAMPLE_SFREQ = 200
+
+# Player labels in the raw file are swapped relative to behavioral metadata.
+# P1 uses channels prefixed with "2-", P2 uses channels prefixed with "1-".
+PLAYER_PREFIX_MAP = {
+    "P1": "2-",
+    "P2": "1-",
+}
+
+# Optional TSV with bad-channel annotations.
+# Leave as None to skip manual interpolation lists.
+BAD_CHANNELS_FILE = None
+
+# Automatic bad-channel detection (robust z-score on channel STD).
+BAD_CHANNEL_ZSCORE_THRESHOLD = 4.0
+BAD_CHANNEL_FLAT_STD_THRESHOLD = 1e-12
+QC_DIR = OUTPUT_DIR / "qc"
+QC_DIR.mkdir(parents=True, exist_ok=True)
 
 # Epoching
 MAX_EPOCHS = 500
@@ -115,8 +133,8 @@ channel_labels = {
 }
 
 channel_types = {
-    "Erg1": "misc",
-    "Erg2": "misc",
+    "Erg1": "eog",
+    "Erg2": "eog",
     "Resp": "resp",
     "Plet": "misc",
     "Temp": "temperature",
