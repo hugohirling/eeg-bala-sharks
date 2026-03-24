@@ -18,19 +18,19 @@ PIPELINE_STEPS = [
     "01_split_players.py",
     "02_rename_set_montage.py",
     "03_bad_channels_detect.py",
-    "03_interpolate_bad_channels.py",
-    "01_filter.py",
-    "04_ica.py",
-    "05_epoch.py",
+    "04_interpolate_bad_channels.py",
+    "05_filter.py",
+    "06_ica.py",
+    "07_epoch.py",
 ]
 
 PERSON_SPECIFIC_STEPS = {
     "02_rename_set_montage.py",
     "03_bad_channels_detect.py",
-    "03_interpolate_bad_channels.py",
-    "01_filter.py",
-    "04_ica.py",
-    "05_epoch.py",
+    "04_interpolate_bad_channels.py",
+    "05_filter.py",
+    "06_ica.py",
+    "07_epoch.py",
 }
 
 
@@ -129,6 +129,10 @@ def main() -> int:
     logger = setup_logger()
 
     steps = args.steps
+
+    if not config.SUBJECTS:
+        logger.error("No subjects configured. Add sub-* folders under BIDS root or set EEG_SUBJECTS.")
+        return 1
 
     logger.info("Starting EEG pipeline runner")
     logger.info(f"Subjects: {config.SUBJECTS}")

@@ -1,6 +1,7 @@
 # config.py
-import os
 from pathlib import Path
+
+from helper.subject_resolution import resolve_subjects
 
 # Paths
 BASE_DIR = Path(__file__).parent.parent  # EEG_Bala Sharks
@@ -9,8 +10,11 @@ OUTPUT_DIR = BASE_DIR / "data"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 BIOSEMI64_MAT_PATH = BASE_DIR / "biosemi64.mat"
 
+
 # Subjects
-SUBJECTS = ["01"]
+# Default: discover all available sub-* folders under BIDS_ROOT.
+# Optional override: set EEG_SUBJECTS="01,02,03".
+SUBJECTS = resolve_subjects(BIDS_ROOT)
 
 # Filter
 FREQ_LOWER = 1.0

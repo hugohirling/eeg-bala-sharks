@@ -21,7 +21,7 @@ PIPELINE_DIR = CURRENT_DIR.parent / "eeg_pipeline"
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
-from eeg_pipeline import config
+import config
 
 
 def _save_montage_visualizations(raw, subject_id, person):
