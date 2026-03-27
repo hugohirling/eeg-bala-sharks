@@ -14,23 +14,23 @@ import config
 from helper.helper_functions import get_previous_step_file
 
 PIPELINE_STEPS = [
-    "00_downsample.py",
-    "01_split_players.py",
-    "02_rename_set_montage.py",
-    "03_bad_channels_detect.py",
-    "04_interpolate_bad_channels.py",
-    "05_filter.py",
-    "06_ica.py",
-    "07_epoch.py",
+    "preprocessing/00_downsample.py",
+    "preprocessing/01_split_players.py",
+    "preprocessing/02_rename_set_montage.py",
+    "preprocessing/03_bad_channels_detect.py",
+    "preprocessing/04_interpolate_bad_channels.py",
+    "preprocessing/05_filter.py",
+    "preprocessing/06_ica.py",
+    "preprocessing/07_epoch.py",
 ]
 
 PERSON_SPECIFIC_STEPS = {
-    "02_rename_set_montage.py",
-    "03_bad_channels_detect.py",
-    "04_interpolate_bad_channels.py",
-    "05_filter.py",
-    "06_ica.py",
-    "07_epoch.py",
+    "preprocessing/02_rename_set_montage.py",
+    "preprocessing/03_bad_channels_detect.py",
+    "preprocessing/04_interpolate_bad_channels.py",
+    "preprocessing/05_filter.py",
+    "preprocessing/06_ica.py",
+    "preprocessing/07_epoch.py",
 }
 
 

@@ -4,8 +4,9 @@ import sys
 from mne_bids import BIDSPath, read_raw_bids
 
 CURRENT_DIR = Path(__file__).resolve().parent
-if str(CURRENT_DIR) not in sys.path:
-    sys.path.insert(0, str(CURRENT_DIR))
+PIPELINE_DIR = CURRENT_DIR.parent
+if str(PIPELINE_DIR) not in sys.path:
+    sys.path.insert(0, str(PIPELINE_DIR))
 
 import config
 from helper.helper_functions import save_current_step_file

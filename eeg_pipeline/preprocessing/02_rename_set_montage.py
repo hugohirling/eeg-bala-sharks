@@ -6,8 +6,9 @@ import numpy as np
 from scipy.io import loadmat
 
 CURRENT_DIR = Path(__file__).resolve().parent
-if str(CURRENT_DIR) not in sys.path:
-    sys.path.insert(0, str(CURRENT_DIR))
+PIPELINE_DIR = CURRENT_DIR.parent
+if str(PIPELINE_DIR) not in sys.path:
+    sys.path.insert(0, str(PIPELINE_DIR))
 
 import config
 from helper.helper_functions import get_step_io_files, save_current_step_file

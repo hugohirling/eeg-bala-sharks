@@ -73,3 +73,8 @@ tmput4k8pzd
 # Other data files
 *.tsv
 *.png
+2025.01.09.632285v3.full.txt
+
+# Output directory: keep folder, ignore generated contents
+output/*
+!output/.gitkeep

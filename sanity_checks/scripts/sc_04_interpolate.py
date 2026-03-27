@@ -16,7 +16,7 @@ CURRENT_DIR = Path(__file__).resolve().parent
 if str(CURRENT_DIR) not in sys.path:
     sys.path.insert(0, str(CURRENT_DIR))
 
-PIPELINE_DIR = CURRENT_DIR.parent / "eeg_pipeline"
+PIPELINE_DIR = CURRENT_DIR.parent.parent / "eeg_pipeline"
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
@@ -88,3 +88,4 @@ def sanity_check_interpolate_bad_channels():
 
 if __name__ == "__main__":
     sanity_check_interpolate_bad_channels()
+

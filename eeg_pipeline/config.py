@@ -6,7 +6,7 @@ from helper.subject_resolution import resolve_subjects
 # Paths
 BASE_DIR = Path(__file__).parent.parent  # EEG_Bala Sharks
 BIDS_ROOT = BASE_DIR / "MNE-sample-data" / "ds006761"
-OUTPUT_DIR = BASE_DIR / "data"
+OUTPUT_DIR = BASE_DIR / "output" / "preprocessing"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 BIOSEMI64_MAT_PATH = BASE_DIR / "biosemi64.mat"
 
@@ -37,7 +37,7 @@ BAD_CHANNELS_FILE = None
 # Automatic bad-channel detection (robust z-score on channel STD).
 BAD_CHANNEL_ZSCORE_THRESHOLD = 4.0
 BAD_CHANNEL_FLAT_STD_THRESHOLD = 1e-12
-QC_DIR = OUTPUT_DIR / "qc"
+QC_DIR = BASE_DIR / "output" / "qc"
 QC_DIR.mkdir(parents=True, exist_ok=True)
 
 # Epoching
