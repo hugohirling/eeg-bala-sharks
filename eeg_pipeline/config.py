@@ -5,7 +5,7 @@ from helper.subject_resolution import resolve_subjects
 
 # Paths
 BASE_DIR = Path(__file__).parent.parent  # EEG_Bala Sharks
-BIDS_ROOT = BASE_DIR / "MNE-sample-data" / "ds006761"
+BIDS_ROOT = BASE_DIR / "input" / "ds006761"
 OUTPUT_DIR = BASE_DIR / "output" / "preprocessing"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 BIOSEMI64_MAT_PATH = BASE_DIR / "biosemi64.mat"
