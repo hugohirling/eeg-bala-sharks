@@ -57,6 +57,11 @@ def _rename_eeg_channels(raw, person):
     if strip_prefix_map:
         raw.rename_channels(strip_prefix_map)
 
+    # Remove channels starting with 'C' or 'D'
+    channels_to_drop = [ch for ch in raw.ch_names if ch.startswith('C') or ch.startswith('D')]
+    if channels_to_drop:
+        raw.drop_channels(channels_to_drop)
+
     mapping_1020 = {
         ch: config.channel_labels[ch]
         for ch in raw.ch_names
