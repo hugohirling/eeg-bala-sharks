@@ -371,7 +371,7 @@ def main() -> None:
     subjects = _resolve_subjects(args.subjects)
     targets = _resolve_targets(args.targets)
 
-    out_dir = Path(config.OUTPUT_DIR).parent / "analysis"
+    out_dir = Path(config.OUTPUT_DIR).parent / "decoding"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     df, group_mean_maps, info, windows = run_topomaps(

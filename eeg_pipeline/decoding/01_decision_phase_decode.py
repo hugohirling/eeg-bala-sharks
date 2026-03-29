@@ -420,7 +420,7 @@ def main() -> None:
         random_state=args.random_state,
     )
 
-    out_dir = Path(config.OUTPUT_DIR).parent / "analysis"
+    out_dir = Path(config.OUTPUT_DIR).parent / "decoding"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     df = _to_dataframe(rows)
