@@ -5,7 +5,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 # 05_ica.py
 from mne.preprocessing import ICA
 from utils import load_raw, save_object
-import config
+from preprocessing import config
 
 def run_ica(subject_id):
     epochs_file = config.OUTPUT_DIR / f"epochs_{subject_id}.fif"

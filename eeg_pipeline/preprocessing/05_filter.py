@@ -8,12 +8,17 @@ PIPELINE_DIR = CURRENT_DIR.parent
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
-import config
-from helper.helper_functions import get_step_io_files, save_current_step_file
+from preprocessing import config
+from helper.general.helper_functions import get_step_io_files, save_current_step_file
 
 
 def load_previous_step_data(subject_id):
-    path_in, _ = get_step_io_files(subject_id, __file__)
+    path_in, _ = get_step_io_files(
+        subject_id,
+        __file__,
+        pipeline_steps=config.PIPELINE_STEPS,
+        step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
+    )
     if path_in is None:
         raise ValueError("Filter step requires an input file from the previous pipeline step")
 
@@ -30,14 +35,26 @@ def filter_data(raw, l_freq=config.FREQ_LOWER, h_freq=config.FREQ_UPPER):
 def process_subject(subject_id):
     outputs = []
     for person in ["P1", "P2"]:
-        path_in, _ = get_step_io_files(subject_id, __file__, person=person)
+        path_in, _ = get_step_io_files(
+            subject_id,
+            __file__,
+            person=person,
+            pipeline_steps=config.PIPELINE_STEPS,
+            step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
+        )
         if path_in is None:
             raise ValueError("Filter step requires an input file from the previous pipeline step")
 
         print(f"Loading previous step file: {path_in}")
         raw = mne.io.read_raw_fif(path_in, preload=True)
         raw = filter_data(raw)
-        out_path = save_current_step_file(raw, subject_id, __file__, person=person)
+        out_path = save_current_step_file(
+            raw,
+            subject_id,
+            __file__,
+            person=person,
+            step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
+        )
         print(f"Saved filtered file ({person}) to: {out_path}")
         outputs.append((person, path_in, out_path))
     return outputs

@@ -1,7 +1,7 @@
 # 04_re_reference_common_average.py
 import mne
 from utils import load_raw, save_raw
-import config
+from preprocessing import config
 from pathlib import Path
 
 def rereference_subject(file_path: Path):

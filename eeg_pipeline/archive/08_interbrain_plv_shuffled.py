@@ -3,7 +3,7 @@ import numpy as np
 import mne
 from mne_connectivity import spectral_connectivity_epochs
 from utils import load_raw, save_raw
-import config
+from preprocessing import config
 
 # Interbrain Synchrony (IBS) parameters
 # -------------------------------

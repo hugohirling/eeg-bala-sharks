@@ -46,4 +46,4 @@ for script in sanity_checks/scripts/sc_*.py; do python $script; done
 
 ## Integration in Pipeline
 
-Optional können diese Sanity Checks automatisch nach jedem entsprechenden Schritt im `master_pipeline.py` aufgerufen werden.
+Optional können diese Sanity Checks automatisch nach jedem entsprechenden Schritt in `eeg_pipeline/preprocessing/master_pipeline.py` aufgerufen werden.

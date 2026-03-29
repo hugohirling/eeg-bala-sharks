@@ -58,7 +58,7 @@ def process_subject(path_in, path_out):
 
 
 if __name__ == "__main__":
-    import config
+    from preprocessing import config
 
     for subj in config.SUBJECTS:
         p1 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P1_filtered.fif"

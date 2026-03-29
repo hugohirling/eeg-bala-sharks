@@ -4,7 +4,7 @@ import mne
 import numpy as np
 from pathlib import Path
 from autoreject import AutoReject
-import config
+from preprocessing import config
 
 def apply_autoreject(epochs):
     """
@@ -64,7 +64,7 @@ def process_subject(path_in, path_out):
 
 
 if __name__ == "__main__":
-    import config
+    from preprocessing import config
     for subj in config.SUBJECTS:
         p1 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P1_epoch.fif"
         p2 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P2_epoch.fif"

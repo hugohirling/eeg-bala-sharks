@@ -24,7 +24,7 @@ def process_subject(path_in, path_out):
     print(f"Saved down-sampled-channels file to: {path_out}")
 
 if __name__ == "__main__":
-    import config
+    from preprocessing import config
     for subj in config.SUBJECTS:
         p1 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P1_ica_cleaned.fif"
         p2 = Path(config.OUTPUT_DIR) / f"sub-{subj}_P2_ica_cleaned.fif"

@@ -9,8 +9,8 @@ PIPELINE_DIR = CURRENT_DIR.parent
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
-import config
-from helper.helper_functions import get_step_io_files, save_current_step_file
+from preprocessing import config
+from helper.general.helper_functions import get_step_io_files, save_current_step_file
 
 
 def _compute_robust_z(values):
@@ -37,7 +37,13 @@ def _write_qc_report(subject_id, person, channel_names, std_values, z_scores, re
 def detect_bad_channels(subject_id):
     outputs = []
     for person in ["P1", "P2"]:
-        path_in, _ = get_step_io_files(subject_id, __file__, person=person)
+        path_in, _ = get_step_io_files(
+            subject_id,
+            __file__,
+            person=person,
+            pipeline_steps=config.PIPELINE_STEPS,
+            step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
+        )
         if path_in is None:
             raise ValueError("Bad-channel detection step requires rename+montage input files")
 
@@ -78,7 +84,13 @@ def detect_bad_channels(subject_id):
         else:
             print(f"No bad-channel suggestions for {subject_id} {person}.")
 
-        out_path = save_current_step_file(raw, subject_id, __file__, person=person)
+        out_path = save_current_step_file(
+            raw,
+            subject_id,
+            __file__,
+            person=person,
+            step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
+        )
         print(f"Saved detection output ({person}) to: {out_path}")
         outputs.append((person, out_path, report_path, suggested_bads))
 

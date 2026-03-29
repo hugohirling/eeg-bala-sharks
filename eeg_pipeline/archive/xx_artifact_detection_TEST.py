@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import mne
 from autoreject import AutoReject
 from utils import save_object
-import config
+from preprocessing import config
 
 def detect_artifacts(subject_id):
     """

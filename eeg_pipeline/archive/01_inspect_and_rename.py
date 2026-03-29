@@ -1,6 +1,6 @@
 import mne
 from pathlib import Path
-import config
+from preprocessing import config
 
 # BioSemi64 → Standard 10-20 Mapping
 BIOS64_TO_1020 = {

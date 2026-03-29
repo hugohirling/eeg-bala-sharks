@@ -1,191 +1,90 @@
-"""
-Baseline Correction and Time Binning
-Following Moerel et al. (2025) preprocessing pipeline
-Step 6: Apply baseline correction and bin data into 250 ms time bins
-"""
+from pathlib import Path
+import sys
 
-import os
-import logging
 import mne
 import numpy as np
-from pathlib import Path
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+CURRENT_DIR = Path(__file__).resolve().parent
+PIPELINE_DIR = CURRENT_DIR.parent
+if str(PIPELINE_DIR) not in sys.path:
+    sys.path.insert(0, str(PIPELINE_DIR))
 
+from preprocessing import config
 
-def load_epochs(epochs_file):
-    """Load epoch data"""
-    logger.info(f"Loading epochs from: {epochs_file}")
-    epochs = mne.read_epochs(epochs_file, preload=True)
-    logger.info(f"Loaded {len(epochs)} epochs")
-    logger.info(f"Data shape: {epochs.get_data().shape}")
-    return epochs
-
-
-def apply_baseline_correction(epochs):
-    """
-    Apply baseline correction
-    Following Moerel et al. (2025):
-    "We applied baseline corrections for each separate epoch, using the window from -200 ms to 0 ms"
-    
-    Note: Baseline correction was already applied during epoching
-    This function documents the process
-    """
-    logger.info("Baseline correction window: -200 ms to 0 ms")
-    logger.info("(Already applied during epoching)")
-    return epochs
+from helper.general.helper_functions import load_epochs_fif, save_epochs_fif, save_json
+from helper.authors.authors_helpers import resolve_bin_duration, resolve_output_dir
 
 
 def create_time_bins(epochs, bin_duration=0.25):
-    """
-    Bin data into 250 ms time bins
-    Following Moerel et al. (2025):
-    "we averaged the resulting data into 250 ms time bins, resulting in a total of 20 time bins 
-    for the 0 to 5000 ms time-course"
-    
-    Parameters
-    ----------
-    epochs : mne.Epochs
-        Epoch data
-    bin_duration : float
-        Duration of each time bin in seconds (default: 0.25 = 250 ms)
-    """
-    
-    logger.info(f"Creating {bin_duration * 1000:.0f} ms time bins...")
-    
-    data = epochs.get_data()  # Shape: (n_epochs, n_channels, n_timepoints)
-    sfreq = epochs.info['sfreq']
+    data = epochs.get_data()
+    sfreq = epochs.info["sfreq"]
     times = epochs.times
-    
-    # Determine bin edges
     bin_size_samples = int(bin_duration * sfreq)
-    
-    # Create time bins
+
     binned_data = []
     bin_times = []
-    
     start_idx = 0
     while start_idx < data.shape[2]:
         end_idx = min(start_idx + bin_size_samples, data.shape[2])
-        
-        # Average data in this bin
-        bin_data = np.mean(data[:, :, start_idx:end_idx], axis=2)
-        binned_data.append(bin_data)
-        
-        # Get time point for this bin (middle of the bin)
-        bin_time = np.mean(times[start_idx:end_idx])
-        bin_times.append(bin_time)
-        
+        binned_data.append(np.mean(data[:, :, start_idx:end_idx], axis=2))
+        bin_times.append(np.mean(times[start_idx:end_idx]))
         start_idx = end_idx
-    
-    # Stack binned data
-    binned_data = np.stack(binned_data, axis=2)  # Shape: (n_epochs, n_channels, n_bins)
-    bin_times = np.array(bin_times)
-    
-    logger.info(f"Original time points: {data.shape[2]} (duration: {times[-1]:.3f} s)")
-    logger.info(f"Binned time points: {binned_data.shape[2]} (bin duration: {bin_duration} s)")
-    logger.info(f"Time range: {times[0]:.3f} to {times[-1]:.3f} seconds")
-    
-    return binned_data, bin_times, bin_size_samples
+
+    return np.stack(binned_data, axis=2), np.array(bin_times)
 
 
-def create_binned_epochs(epochs, binned_data, bin_times):
-    """
-    Create new epochs object with binned data
-    """
-    logger.info("Creating binned epochs object...")
-    
-    # Create new epochs with binned times
-    binned_epochs = epochs.copy()
-    
-    # Replace the data with binned data
-    binned_epochs._data = binned_data
-    
-    # Update the times array
-    binned_epochs.times = bin_times
-    
-    return binned_epochs
+def process_subject(subject_id, bin_duration=0.25):
+    output_dir = resolve_output_dir()
 
-
-def process_all_phases(epochs_dir, subject_id, bin_duration=0.25):
-    """Process all three phases (decision, response, feedback)"""
-    
-    logger.info("=" * 60)
-    logger.info("Step 6: Baseline Correction and Time Binning")
-    logger.info("=" * 60)
-    
-    phases = ['decision', 'response', 'feedback']
-    binned_epochs_dict = {}
-    metadata = {}
-    
-    for phase in phases:
-        logger.info(f"\nProcessing {phase} phase...")
-        
-        # Load epochs for this phase
-        epochs_file = os.path.join(epochs_dir, f'{subject_id}_{phase}-epo.fif')
-        
-        if not os.path.exists(epochs_file):
-            logger.warning(f"Epochs file not found: {epochs_file}")
+    for phase in ["decision", "response", "feedback"]:
+        epochs_file = output_dir / f"sub-{subject_id}_{phase}_authors-epo.fif"
+        if not epochs_file.exists():
+            print(f"[authors] Missing epoch file for {phase}: {epochs_file}")
             continue
-        
-        epochs = load_epochs(epochs_file)
-        
-        # Apply baseline correction (already applied, this is for documentation)
-        epochs = apply_baseline_correction(epochs)
-        
-        # Create time bins
-        binned_data, bin_times, bin_size = create_time_bins(epochs, bin_duration=bin_duration)
-        
-        # Create binned epochs
-        binned_epochs = create_binned_epochs(epochs, binned_data, bin_times)
-        
-        binned_epochs_dict[phase] = binned_epochs
-        
-        # Save binned epochs
-        output_file = os.path.join(epochs_dir, f'{subject_id}_{phase}_binned-epo.fif')
-        binned_epochs.save(output_file, overwrite=True)
-        logger.info(f"Saved binned {phase} epochs: {output_file}")
-        
-        metadata[phase] = {
-            'n_epochs': len(binned_epochs),
-            'n_channels': len(binned_epochs.ch_names),
-            'n_bins': binned_epochs.get_data().shape[2],
-            'bin_duration_ms': int(bin_duration * 1000),
-            'time_range': (float(bin_times[0]), float(bin_times[-1]))
-        }
-    
-    logger.info("\n" + "=" * 60)
-    logger.info("Step 6 completed successfully!")
-    logger.info("=" * 60)
-    logger.info("Summary of binned epochs:")
-    for phase, meta in metadata.items():
-        logger.info(f"\n{phase.upper()} phase:")
-        logger.info(f"  - N epochs: {meta['n_epochs']}")
-        logger.info(f"  - N channels: {meta['n_channels']}")
-        logger.info(f"  - N time bins: {meta['n_bins']}")
-        logger.info(f"  - Bin duration: {meta['bin_duration_ms']} ms")
-        logger.info(f"  - Time range: {meta['time_range'][0]:.3f} to {meta['time_range'][1]:.3f} s")
-    
-    return binned_epochs_dict, metadata
 
+        epochs = load_epochs_fif(epochs_file, preload=True)
+        binned_data, binned_times = create_time_bins(epochs, bin_duration=bin_duration)
 
-def main(epochs_dir, subject_id, bin_duration=0.25):
-    """Main processing function"""
-    binned_epochs_dict, metadata = process_all_phases(
-        epochs_dir, subject_id, bin_duration=bin_duration
-    )
+        binned_info = mne.create_info(
+            ch_names=epochs.ch_names,
+            sfreq=1.0 / float(bin_duration),
+            ch_types=epochs.get_channel_types(),
+        )
+        binned_info["bads"] = list(epochs.info.get("bads", []))
+        montage = epochs.get_montage()
+        if montage is not None:
+            binned_info.set_montage(montage, on_missing="ignore")
+
+        binned_epochs = mne.EpochsArray(
+            binned_data,
+            binned_info,
+            events=epochs.events,
+            event_id=epochs.event_id,
+            tmin=float(binned_times[0]) if len(binned_times) else float(epochs.times[0]),
+            baseline=None,
+            metadata=epochs.metadata,
+        )
+
+        binned_file = output_dir / f"sub-{subject_id}_{phase}_binned_authors-epo.fif"
+        save_epochs_fif(binned_epochs, binned_file)
+
+        meta_file = output_dir / f"sub-{subject_id}_{phase}_binned_authors_meta.json"
+        save_json(
+            {
+                "subject": f"sub-{subject_id}",
+                "phase": phase,
+                "n_epochs": int(binned_data.shape[0]),
+                "n_channels": int(binned_data.shape[1]),
+                "n_bins": int(binned_data.shape[2]),
+                "bin_duration_ms": int(bin_duration * 1000),
+            },
+            meta_file,
+        )
+
+        print(f"[authors] Saved binned output: {binned_file}")
 
 
 if __name__ == "__main__":
-    # Example usage
-    from config import settings
-    
-    subject = "sub-01"
-    epochs_dir = str(Path(settings.OUTPUT_ROOT) / "preprocessing_authors")
-    
-    main(epochs_dir, subject, bin_duration=0.25)
+    bin_duration = resolve_bin_duration()
+    for subj in config.SUBJECTS:
+        process_subject(subj, bin_duration=bin_duration)

@@ -18,7 +18,7 @@ PIPELINE_DIR = CURRENT_DIR.parent
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
-import config
+from preprocessing import config
 
 RESP_CODE_TO_NAME = {1: "rock", 2: "paper", 3: "scissors"}
 TARGET_CHOICES = {
@@ -371,7 +371,7 @@ def main() -> None:
     subjects = _resolve_subjects(args.subjects)
     targets = _resolve_targets(args.targets)
 
-    out_dir = Path(config.OUTPUT_DIR).parent / "analysis"
+    out_dir = Path(config.OUTPUT_DIR).parent / "decoding"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     df, group_mean_maps, info, windows = run_topomaps(
