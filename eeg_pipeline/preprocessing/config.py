@@ -1,10 +1,10 @@
 # config.py
 from pathlib import Path
 
-from helper.subject_resolution import resolve_subjects
+from helper.general.subject_resolution import resolve_subjects
 
 # Paths
-BASE_DIR = Path(__file__).parent.parent  # EEG_Bala Sharks
+BASE_DIR = Path(__file__).parent.parent.parent  # EEG_Bala Sharks
 BIDS_ROOT = BASE_DIR / "input" / "ds006761"
 OUTPUT_DIR = BASE_DIR / "output" / "preprocessing"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -15,6 +15,40 @@ BIOSEMI64_MAT_PATH = BASE_DIR / "biosemi64.mat"
 # Default: discover all available sub-* folders under BIDS_ROOT.
 # Optional override: set EEG_SUBJECTS="01,02,03".
 SUBJECTS = resolve_subjects(BIDS_ROOT)
+
+# Pipeline orchestration (single source of truth for standard preprocessing).
+STEP_FILE_MAP = {
+    "downsample": "preprocessing/00_downsample.py",
+    "split_players": "preprocessing/01_split_players.py",
+    "rename_set_montage": "preprocessing/02_rename_set_montage.py",
+    "bad_channels_detect": "preprocessing/03_bad_channels_detect.py",
+    "interpolate_bad_channels": "preprocessing/04_interpolate_bad_channels.py",
+    "filter": "preprocessing/05_filter.py",
+    "ica": "preprocessing/06_ica.py",
+    "epoch": "preprocessing/07_epoch.py",
+}
+
+PIPELINE_STEPS = list(STEP_FILE_MAP.values())
+
+STEP_OUTPUT_SUFFIXES = {
+    "downsample": "downsampled",
+    "split_players": "split",
+    "rename_set_montage": "renamed_montaged",
+    "bad_channels_detect": "badchannels_detected",
+    "interpolate_bad_channels": "interpolated",
+    "filter": "filtered",
+    "ica": "ica_cleaned",
+    "epoch": "epoch",
+}
+
+PERSON_SPECIFIC_STEPS = {
+    STEP_FILE_MAP["rename_set_montage"],
+    STEP_FILE_MAP["bad_channels_detect"],
+    STEP_FILE_MAP["interpolate_bad_channels"],
+    STEP_FILE_MAP["filter"],
+    STEP_FILE_MAP["ica"],
+    STEP_FILE_MAP["epoch"],
+}
 
 # Filter
 FREQ_LOWER = 1.0

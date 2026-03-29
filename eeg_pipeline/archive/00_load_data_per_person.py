@@ -1,6 +1,6 @@
 # 01_load_data.py
 from mne_bids import BIDSPath, read_raw_bids
-import config
+from preprocessing import config
 from utils import save_raw
 import mne
 

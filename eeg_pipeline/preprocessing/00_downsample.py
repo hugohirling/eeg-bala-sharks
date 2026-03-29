@@ -8,8 +8,8 @@ PIPELINE_DIR = CURRENT_DIR.parent
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
-import config
-from helper.helper_functions import save_current_step_file
+from preprocessing import config
+from helper.general.helper_functions import save_current_step_file
 
 
 def load_data(subject_id):
@@ -38,7 +38,12 @@ def downsample_data(raw, target_sfreq=config.DOWNSAMPLE_SFREQ):
 def process_subject(subject_id):
     raw = load_data(subject_id)
     raw = downsample_data(raw)
-    out_path = save_current_step_file(raw, subject_id, __file__)
+    out_path = save_current_step_file(
+        raw,
+        subject_id,
+        __file__,
+        step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
+    )
     print(f"Saved downsampled file to: {out_path}")
     return out_path
 

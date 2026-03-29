@@ -20,7 +20,7 @@ PIPELINE_DIR = CURRENT_DIR.parent
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
-import config
+from preprocessing import config
 
 RESP_CODE_TO_NAME = {1: "rock", 2: "paper", 3: "scissors"}
 

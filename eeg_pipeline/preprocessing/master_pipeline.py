@@ -8,31 +8,15 @@ import sys
 from pathlib import Path
 
 CURRENT_DIR = Path(__file__).resolve().parent
-if str(CURRENT_DIR) not in sys.path:
-    sys.path.insert(0, str(CURRENT_DIR))
+PIPELINE_DIR = CURRENT_DIR.parent
+if str(PIPELINE_DIR) not in sys.path:
+    sys.path.insert(0, str(PIPELINE_DIR))
 
-import config
-from helper.helper_functions import get_previous_step_file
+from preprocessing import config
+from helper.general.helper_functions import get_previous_step_file
 
-PIPELINE_STEPS = [
-    "preprocessing/00_downsample.py",
-    "preprocessing/01_split_players.py",
-    "preprocessing/02_rename_set_montage.py",
-    "preprocessing/03_bad_channels_detect.py",
-    "preprocessing/04_interpolate_bad_channels.py",
-    "preprocessing/05_filter.py",
-    "preprocessing/06_ica.py",
-    "preprocessing/07_epoch.py",
-]
-
-PERSON_SPECIFIC_STEPS = {
-    "preprocessing/02_rename_set_montage.py",
-    "preprocessing/03_bad_channels_detect.py",
-    "preprocessing/04_interpolate_bad_channels.py",
-    "preprocessing/05_filter.py",
-    "preprocessing/06_ica.py",
-    "preprocessing/07_epoch.py",
-}
+PIPELINE_STEPS = config.PIPELINE_STEPS
+PERSON_SPECIFIC_STEPS = config.PERSON_SPECIFIC_STEPS
 
 
 def prompt_subject_selection(all_subjects: list[str]) -> list[str]:
@@ -103,7 +87,13 @@ def _input_requirements_for_step(step_file: str, subject_id: str) -> list[Path]:
 
     required_inputs: list[Path] = []
     for person in persons:
-        input_path = get_previous_step_file(subject_id=subject_id, current_step=step_file, person=person)
+        input_path = get_previous_step_file(
+            subject_id=subject_id,
+            current_step=step_file,
+            person=person,
+            pipeline_steps=config.PIPELINE_STEPS,
+            step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
+        )
         if input_path is None:
             continue
         required_inputs.append(input_path)
@@ -132,7 +122,7 @@ def preflight_check_for_step(step_file: str, logger: logging.Logger) -> list[str
 
 def run_pipeline(steps: list[str], logger: logging.Logger, skip_preflight: bool = False) -> int:
     for index, step_file in enumerate(steps, start=1):
-        step_path = CURRENT_DIR / step_file
+        step_path = PIPELINE_DIR / step_file
         if not step_path.exists():
             logger.error(f"Step file not found: {step_path}")
             return 1
@@ -144,7 +134,7 @@ def run_pipeline(steps: list[str], logger: logging.Logger, skip_preflight: bool 
                 return 1
 
         logger.info(f"[{index}/{len(steps)}] Running {step_file}")
-        result = subprocess.run([sys.executable, str(step_path)], cwd=str(CURRENT_DIR))
+        result = subprocess.run([sys.executable, str(step_path)], cwd=str(PIPELINE_DIR))
         if result.returncode != 0:
             logger.error(f"Step failed with exit code {result.returncode}: {step_file}")
             return result.returncode
@@ -186,7 +176,7 @@ def main() -> int:
 
     all_subjects = config.SUBJECTS
     if not all_subjects:
-        logger.error("No subjects found. Check BIDS_ROOT in config.py or set EEG_SUBJECTS env var.")
+        logger.error("No subjects found. Check BIDS_ROOT in preprocessing/config.py or set EEG_SUBJECTS env var.")
         return 1
 
     if args.subjects:

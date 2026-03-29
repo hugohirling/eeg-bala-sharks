@@ -1,119 +1,56 @@
-"""
-Interpolate Noisy Channels
-Following Moerel et al. (2025) preprocessing pipeline
-Step 3: Channel interpolation using neighboring channels
-"""
-
-import os
-import logging
-import mne
-import json
 from pathlib import Path
+import sys
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+CURRENT_DIR = Path(__file__).resolve().parent
+PIPELINE_DIR = CURRENT_DIR.parent
+if str(PIPELINE_DIR) not in sys.path:
+    sys.path.insert(0, str(PIPELINE_DIR))
 
+from preprocessing import config
+from helper.general.helper_functions import get_step_io_files, save_current_step_file
+from helper.general.helper_functions import load_json, load_raw_fif
 
-def load_data(input_file):
-    """Load EEG data with CAR already applied"""
-    logger.info(f"Loading data from: {input_file}")
-    raw = mne.io.read_raw_fif(input_file, preload=True)
-    logger.info(f"Data shape: {raw.get_data().shape}")
-    return raw
+from helper.authors.authors_helpers import PIPELINE_STEPS, STEP_OUTPUT_SUFFIXES, resolve_output_dir
 
 
-def load_noisy_channels(log_file):
-    """Load noisy channels from log file"""
-    logger.info(f"Loading noisy channels from: {log_file}")
-    
-    if not os.path.exists(log_file):
-        logger.warning(f"Log file not found: {log_file}")
-        logger.info("No noisy channels will be interpolated")
-        return []
-    
-    with open(log_file, 'r') as f:
-        info = json.load(f)
-    
-    noisy_channels = info.get('noisy_channels', [])
-    logger.info(f"Found {len(noisy_channels)} noisy channels to interpolate: {noisy_channels}")
-    return noisy_channels
+def process_subject(subject_id):
+    output_dir = resolve_output_dir()
 
+    path_in, _ = get_step_io_files(
+        subject_id=subject_id,
+        current_step=__file__,
+        output_dir=output_dir,
+        pipeline_steps=PIPELINE_STEPS,
+        step_output_suffixes=STEP_OUTPUT_SUFFIXES,
+    )
+    if path_in is None or not Path(path_in).exists():
+        raise FileNotFoundError(f"Input not found for sub-{subject_id}: {path_in}")
 
-def interpolate_bad_channels(raw, bad_channels):
-    """
-    Interpolate noisy channels using neighboring channels
-    Following Moerel et al. (2025): 
-    "We interpolated noisy channels based on neighbouring channels, 
-    using the ft_channelrepair function with a distance measure of 0.5 cm"
-    
-    MNE's interpolate_bads() function implements similar functionality
-    """
-    
-    if not bad_channels:
-        logger.info("No bad channels to interpolate")
-        return raw
-    
-    logger.info(f"Setting bad channels: {bad_channels}")
-    raw.info['bads'] = bad_channels
-    
-    logger.info(f"Interpolating {len(bad_channels)} bad channels using neighboring channels...")
-    logger.info("(MNE's spherical spline interpolation, similar to FieldTrip's ft_channelrepair)")
-    
-    # Interpolate bad channels
-    raw.interpolate_bads(reset_bads=True)
-    
-    logger.info("Channel interpolation completed")
-    return raw
+    print(f"[authors] Loading input: {path_in}")
+    raw = load_raw_fif(path_in, preload=True)
 
+    noisy_json = output_dir / "qc" / f"sub-{subject_id}_noisy_channels_authors.json"
+    noisy_info = load_json(noisy_json, default={})
+    bads = noisy_info.get("noisy_channels", []) if isinstance(noisy_info, dict) else []
 
-def save_processed_data(raw, output_file):
-    """Save processed data"""
-    logger.info(f"Saving processed data to: {output_file}")
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    raw.save(output_file, overwrite=True)
-    logger.info(f"File saved: {output_file}")
+    if bads:
+        raw.info["bads"] = bads
+        raw.interpolate_bads(reset_bads=True)
+        print(f"[authors] Interpolated channels: {bads}")
+    else:
+        print("[authors] No noisy channels found; interpolation skipped")
 
-
-def main(input_file, noisy_channels_log, output_file):
-    """Main processing function"""
-    logger.info("=" * 60)
-    logger.info("Step 3: Interpolate Noisy Channels")
-    logger.info("=" * 60)
-    
-    # Load data
-    raw = load_data(input_file)
-    
-    # Load noisy channels
-    bad_channels = load_noisy_channels(noisy_channels_log)
-    
-    # Interpolate
-    raw = interpolate_bad_channels(raw, bad_channels)
-    
-    # Save
-    save_processed_data(raw, output_file)
-    
-    logger.info("Step 3 completed successfully!")
-    logger.info("=" * 60)
+    out_path = save_current_step_file(
+        raw,
+        subject_id,
+        __file__,
+        output_dir=output_dir,
+        step_output_suffixes=STEP_OUTPUT_SUFFIXES,
+    )
+    print(f"[authors] Saved interpolated output: {out_path}")
+    return out_path
 
 
 if __name__ == "__main__":
-    # Example usage
-    from config import settings
-    
-    subject = "sub-01"
-    input_dir = Path(settings.DATA_ROOT) / subject
-    output_dir = Path(settings.OUTPUT_ROOT) / "preprocessing_authors"
-    qc_dir = output_dir / "qc"
-    
-    input_file = input_dir / f"{subject}_car.fif"
-    noisy_channels_log = qc_dir / f"{subject}_noisy_channels.json"
-    output_file = output_dir / f"{subject}_interpolated.fif"
-    
-    if input_file.exists():
-        main(str(input_file), str(noisy_channels_log), str(output_file))
-    else:
-        logger.warning(f"Input file not found: {input_file}")
+    for subj in config.SUBJECTS:
+        process_subject(subj)

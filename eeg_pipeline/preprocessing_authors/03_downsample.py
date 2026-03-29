@@ -1,94 +1,54 @@
-"""
-Downsample EEG Data
-Following Moerel et al. (2025) preprocessing pipeline
-Step 4: Downsample from 2048 Hz to 256 Hz
-"""
-
-import os
-import logging
-import mne
 from pathlib import Path
+import sys
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+CURRENT_DIR = Path(__file__).resolve().parent
+PIPELINE_DIR = CURRENT_DIR.parent
+if str(PIPELINE_DIR) not in sys.path:
+    sys.path.insert(0, str(PIPELINE_DIR))
 
+from preprocessing import config
+from helper.general.helper_functions import get_step_io_files, save_current_step_file
+from helper.general.helper_functions import load_raw_fif
 
-def load_data(input_file):
-    """Load EEG data"""
-    logger.info(f"Loading data from: {input_file}")
-    raw = mne.io.read_raw_fif(input_file, preload=True)
-    logger.info(f"Original sampling rate: {raw.info['sfreq']} Hz")
-    logger.info(f"Data shape: {raw.get_data().shape}")
-    return raw
+from helper.authors.authors_helpers import PIPELINE_STEPS, STEP_OUTPUT_SUFFIXES, resolve_output_dir, resolve_target_sfreq
 
 
 def downsample_data(raw, target_sfreq=256):
-    """
-    Downsample data to target sampling rate
-    Following Moerel et al. (2025): "We then down-sampled the data to 256 Hz."
-    
-    Parameters
-    ----------
-    raw : mne.io.Raw
-        Raw EEG data
-    target_sfreq : int
-        Target sampling frequency (default: 256 Hz)
-    """
-    current_sfreq = raw.info['sfreq']
-    
-    if current_sfreq == target_sfreq:
-        logger.info(f"Data already at {target_sfreq} Hz, skipping downsampling")
-        return raw
-    
-    logger.info(f"Downsampling from {current_sfreq} Hz to {target_sfreq} Hz...")
-    raw.resample(target_sfreq)
-    logger.info(f"Downsampling completed. New sampling rate: {raw.info['sfreq']} Hz")
-    
+    if float(raw.info["sfreq"]) != float(target_sfreq):
+        raw.resample(target_sfreq)
     return raw
 
 
-def save_processed_data(raw, output_file):
-    """Save processed data"""
-    logger.info(f"Saving downsampled data to: {output_file}")
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    raw.save(output_file, overwrite=True)
-    logger.info(f"File saved: {output_file}")
+def process_subject(subject_id, target_sfreq=256):
+    output_dir = resolve_output_dir()
 
+    path_in, _ = get_step_io_files(
+        subject_id=subject_id,
+        current_step=__file__,
+        output_dir=output_dir,
+        pipeline_steps=PIPELINE_STEPS,
+        step_output_suffixes=STEP_OUTPUT_SUFFIXES,
+    )
+    if path_in is None or not Path(path_in).exists():
+        raise FileNotFoundError(f"Input not found for sub-{subject_id}: {path_in}")
 
-def main(input_file, output_file, target_sfreq=256):
-    """Main processing function"""
-    logger.info("=" * 60)
-    logger.info(f"Step 4: Downsample to {target_sfreq} Hz")
-    logger.info("=" * 60)
-    
-    # Load data
-    raw = load_data(input_file)
-    
-    # Downsample
+    print(f"[authors] Loading input: {path_in}")
+    raw = load_raw_fif(path_in, preload=True)
+
     raw = downsample_data(raw, target_sfreq=target_sfreq)
-    
-    # Save
-    save_processed_data(raw, output_file)
-    
-    logger.info("Step 4 completed successfully!")
-    logger.info("=" * 60)
+
+    out_path = save_current_step_file(
+        raw,
+        subject_id,
+        __file__,
+        output_dir=output_dir,
+        step_output_suffixes=STEP_OUTPUT_SUFFIXES,
+    )
+    print(f"[authors] Saved downsampled output: {out_path}")
+    return out_path
 
 
 if __name__ == "__main__":
-    # Example usage
-    from config import settings
-    
-    subject = "sub-01"
-    output_dir = Path(settings.OUTPUT_ROOT) / "preprocessing_authors"
-    
-    input_file = output_dir / f"{subject}_interpolated.fif"
-    output_file = output_dir / f"{subject}_downsampled.fif"
-    
-    if input_file.exists():
-        main(str(input_file), str(output_file), target_sfreq=256)
-    else:
-        logger.warning(f"Input file not found: {input_file}")
+    target_sfreq = resolve_target_sfreq()
+    for subj in config.SUBJECTS:
+        process_subject(subj, target_sfreq=target_sfreq)

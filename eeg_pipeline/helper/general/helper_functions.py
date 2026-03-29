@@ -1,33 +1,13 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
-import config
-
-DEFAULT_PIPELINE_STEPS = [
-	"downsample",
-	"split_players",
-	"rename_set_montage",
-	"bad_channels_detect",
-	"interpolate_bad_channels",
-	"filter",
-	"ica",
-	"epoch",
-]
-
-DEFAULT_STEP_OUTPUT_SUFFIXES = {
-	"downsample": "downsampled",
-	"split_players": "split",
-	"rename_set_montage": "renamed_montaged",
-	"bad_channels_detect": "badchannels_detected",
-	"interpolate_bad_channels": "interpolated",
-	"filter": "filtered",
-	"ica": "ica_cleaned",
-	"epoch": "epoch",
-}
+from preprocessing import config
+import mne
 
 
 def normalize_step_name(step: str | Path) -> str:
@@ -43,7 +23,7 @@ def load_pipeline_steps_from_master(master_pipeline_path: str | Path) -> list[st
 		if not isinstance(node, ast.Assign):
 			continue
 		for target in node.targets:
-			if not isinstance(target, ast.Name) or target.id != "pipeline_steps":
+			if not isinstance(target, ast.Name) or target.id not in {"pipeline_steps", "PIPELINE_STEPS"}:
 				continue
 			if not isinstance(node.value, (ast.List, ast.Tuple)):
 				break
@@ -65,7 +45,9 @@ def _resolve_pipeline_steps(
 	elif master_pipeline_path is not None:
 		raw_steps = load_pipeline_steps_from_master(master_pipeline_path)
 	else:
-		raw_steps = DEFAULT_PIPELINE_STEPS
+		raise ValueError(
+			"pipeline_steps must be provided explicitly (or set master_pipeline_path)"
+		)
 	return [normalize_step_name(step) for step in raw_steps]
 
 
@@ -73,7 +55,7 @@ def _resolve_step_suffixes(
 	step_output_suffixes: dict[str, str] | None = None,
 ) -> dict[str, str]:
 	if step_output_suffixes is None:
-		return dict(DEFAULT_STEP_OUTPUT_SUFFIXES)
+		raise ValueError("step_output_suffixes must be provided explicitly")
 	return {normalize_step_name(step): suffix for step, suffix in step_output_suffixes.items()}
 
 
@@ -211,3 +193,66 @@ def save_current_step_file(
 
 	data.save(output_file, overwrite=overwrite)
 	return output_file
+
+
+def ensure_parent_dir(file_path: str | Path) -> Path:
+	path = Path(file_path)
+	path.parent.mkdir(parents=True, exist_ok=True)
+	return path
+
+
+def _load_with_reader(
+	file_path: str | Path,
+	reader: Callable[[str], Any],
+	*,
+	default: Any = None,
+	allow_missing: bool = False,
+) -> Any:
+	path = Path(file_path)
+	if allow_missing and not path.exists():
+		return default
+	return reader(str(path))
+
+
+def _save_with_writer(file_path: str | Path, writer: Callable[[Path], None]) -> Path:
+	path = ensure_parent_dir(file_path)
+	writer(path)
+	return path
+
+
+def load_raw_fif(input_file: str | Path, preload: bool = True) -> mne.io.BaseRaw:
+	# Use MNE's generic loader so BDF/FIF and other supported raw formats work.
+	return _load_with_reader(
+		input_file,
+		lambda p: mne.io.read_raw(p, preload=preload),
+	)
+
+
+def load_epochs_fif(epochs_file: str | Path, preload: bool = True) -> mne.Epochs:
+	return _load_with_reader(
+		epochs_file,
+		lambda p: mne.read_epochs(p, preload=preload),
+	)
+
+
+def save_epochs_fif(epochs: mne.Epochs, output_file: str | Path, overwrite: bool = True) -> Path:
+	return _save_with_writer(
+		output_file,
+		lambda p: epochs.save(str(p), overwrite=overwrite),
+	)
+
+
+def load_json(json_file: str | Path, default: Any = None) -> Any:
+	return _load_with_reader(
+		json_file,
+		lambda p: json.loads(Path(p).read_text(encoding="utf-8")),
+		default=default,
+		allow_missing=True,
+	)
+
+
+def save_json(payload: Any, json_file: str | Path) -> Path:
+	return _save_with_writer(
+		json_file,
+		lambda p: p.write_text(json.dumps(payload, indent=2), encoding="utf-8"),
+	)

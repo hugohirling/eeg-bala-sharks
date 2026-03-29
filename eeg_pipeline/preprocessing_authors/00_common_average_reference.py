@@ -1,82 +1,57 @@
-"""
-Common Average Reference (CAR) re-referencing
-Following Moerel et al. (2025) preprocessing pipeline
-Step 1: Re-reference to common average
-"""
-
-import os
-import logging
-import mne
-import numpy as np
 from pathlib import Path
+import sys
+import logging
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+CURRENT_DIR = Path(__file__).resolve().parent
+PIPELINE_DIR = CURRENT_DIR.parent
+if str(PIPELINE_DIR) not in sys.path:
+    sys.path.insert(0, str(PIPELINE_DIR))
 
+from preprocessing import config
+from helper.general.helper_functions import get_step_io_files, save_current_step_file
+from helper.general.helper_functions import load_raw_fif
 
-def load_raw_data(input_file):
-    """Load raw EEG data from .fif file"""
-    logger.info(f"Loading raw data from: {input_file}")
-    raw = mne.io.read_raw_fif(input_file, preload=True)
-    logger.info(f"Data shape: {raw.get_data().shape}")
-    logger.info(f"Sampling rate: {raw.info['sfreq']} Hz")
-    return raw
+from helper.authors.authors_helpers import PIPELINE_STEPS, STEP_OUTPUT_SUFFIXES, resolve_initial_input, resolve_output_dir
 
 
 def apply_common_average_reference(raw):
-    """
-    Apply common average reference (CAR)
-    Following Moerel et al. (2025): "we re-referenced the data to the common average"
-    """
-    logger.info("Applying common average reference...")
-    raw.set_eeg_reference(ref_channels='average')
-    logger.info("Common average reference applied successfully")
+    raw.set_eeg_reference(ref_channels="average")
     return raw
 
 
-def save_processed_data(raw, output_file):
-    """Save processed data"""
-    logger.info(f"Saving processed data to: {output_file}")
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    raw.save(output_file, overwrite=True)
-    logger.info(f"File saved: {output_file}")
+def process_subject(subject_id):
+    output_dir = resolve_output_dir()
 
+    path_in, _ = get_step_io_files(
+        subject_id=subject_id,
+        current_step=__file__,
+        output_dir=output_dir,
+        pipeline_steps=PIPELINE_STEPS,
+        step_output_suffixes=STEP_OUTPUT_SUFFIXES,
+    )
 
-def main(input_file, output_file):
-    """Main processing function"""
-    logger.info("=" * 60)
-    logger.info("Step 1: Common Average Reference (CAR)")
-    logger.info("=" * 60)
-    
-    # Load data
-    raw = load_raw_data(input_file)
-    
-    # Apply CAR
+    if path_in is None:
+        path_in = resolve_initial_input(subject_id, logger=logging.getLogger("authors_step00"))
+
+    if not Path(path_in).exists():
+        raise FileNotFoundError(f"Input not found for sub-{subject_id}: {path_in}")
+
+    print(f"[authors] Loading input: {path_in}")
+    raw = load_raw_fif(path_in, preload=True)
+
     raw = apply_common_average_reference(raw)
-    
-    # Save
-    save_processed_data(raw, output_file)
-    
-    logger.info("Step 1 completed successfully!")
-    logger.info("=" * 60)
+
+    out_path = save_current_step_file(
+        raw,
+        subject_id,
+        __file__,
+        output_dir=output_dir,
+        step_output_suffixes=STEP_OUTPUT_SUFFIXES,
+    )
+    print(f"[authors] Saved CAR output: {out_path}")
+    return out_path
 
 
 if __name__ == "__main__":
-    # Example usage
-    from config import settings
-    
-    subject = "sub-01"
-    input_dir = Path(settings.DATA_ROOT) / subject
-    output_dir = Path(settings.OUTPUT_ROOT) / "preprocessing_authors"
-    
-    input_file = input_dir / f"{subject}_raw.fif"
-    output_file = output_dir / f"{subject}_car.fif"
-    
-    if input_file.exists():
-        main(str(input_file), str(output_file))
-    else:
-        logger.warning(f"Input file not found: {input_file}")
+    for subj in config.SUBJECTS:
+        process_subject(subj)

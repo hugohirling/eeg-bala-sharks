@@ -3,7 +3,7 @@ from utils import save_raw, load_raw
 # 01_load_data.py
 from mne_bids import BIDSPath, read_raw_bids
 import mne
-import config
+from preprocessing import config
 from utils import save_raw
 
 def load_data(subject_id):

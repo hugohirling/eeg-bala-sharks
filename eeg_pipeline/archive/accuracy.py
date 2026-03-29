@@ -43,7 +43,7 @@ from sklearn.model_selection import StratifiedKFold
 
 
 # Local imports
-import config
+from preprocessing import config
 from logging_utils import (
     terminal_log,
     redirect_streams,

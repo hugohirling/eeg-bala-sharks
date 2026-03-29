@@ -8,8 +8,8 @@ PIPELINE_DIR = CURRENT_DIR.parent
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
-import config
-from helper.helper_functions import get_step_io_files, save_current_step_file
+from preprocessing import config
+from helper.general.helper_functions import get_step_io_files, save_current_step_file
 
 
 def _pick_existing_channels(raw, channels):
@@ -38,7 +38,12 @@ def _set_channel_types(raw, eeg_channels, player_prefix):
 
 
 def split_players(subject_id):
-    path_in, _ = get_step_io_files(subject_id, __file__)
+    path_in, _ = get_step_io_files(
+        subject_id,
+        __file__,
+        pipeline_steps=config.PIPELINE_STEPS,
+        step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
+    )
     if path_in is None:
         raise ValueError("Split step requires an input file from the previous pipeline step")
 
@@ -59,7 +64,13 @@ def split_players(subject_id):
         split_raw = raw.copy().pick(channels_to_keep)
         _set_channel_types(split_raw, eeg_channels=eeg_channels, player_prefix=prefix)
 
-        out_path = save_current_step_file(split_raw, subject_id, __file__, person=person)
+        out_path = save_current_step_file(
+            split_raw,
+            subject_id,
+            __file__,
+            person=person,
+            step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
+        )
         print(f"Saved split file ({person}) to: {out_path}")
         outputs.append((person, out_path))
 

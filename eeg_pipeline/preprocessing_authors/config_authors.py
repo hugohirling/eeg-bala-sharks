@@ -3,6 +3,10 @@ Configuration for Authors' Preprocessing Pipeline
 Moerel et al. (2025) preprocessing methodology
 """
 
+from pathlib import Path
+
+from preprocessing import config
+
 # ============================================================================
 # DATA PATHS
 # ============================================================================
@@ -12,6 +16,38 @@ DATA_ROOT = "data/raw"
 
 # Output directory for preprocessed data
 OUTPUT_ROOT = "output/preprocessing_authors"
+DEFAULT_OUTPUT_DIR = Path(config.BASE_DIR) / OUTPUT_ROOT
+
+# ============================================================================
+# PIPELINE ORCHESTRATION
+# ============================================================================
+
+STEP_FILE_MAP = {
+    "common_average_reference": "preprocessing_authors/00_common_average_reference.py",
+    "identify_noisy_channels": "preprocessing_authors/01_identify_noisy_channels.py",
+    "interpolate_bad_channels": "preprocessing_authors/02_interpolate_bad_channels.py",
+    "downsample": "preprocessing_authors/03_downsample.py",
+    "epoch": "preprocessing_authors/04_epoch.py",
+    "baseline_correction_binning": "preprocessing_authors/05_baseline_correction_binning.py",
+}
+
+PIPELINE_STEPS = list(STEP_FILE_MAP.keys())
+
+STEP_OUTPUT_SUFFIXES = {
+    "common_average_reference": "car_authors",
+    "identify_noisy_channels": "noisy_checked_authors",
+    "interpolate_bad_channels": "interpolated_authors",
+    "downsample": "downsampled_authors",
+    "epoch": "epoch_authors",
+    "baseline_correction_binning": "binned_authors",
+}
+
+RAW_FLOW_STEPS = {
+    "common_average_reference",
+    "identify_noisy_channels",
+    "interpolate_bad_channels",
+    "downsample",
+}
 
 # ============================================================================
 # PREPROCESSING PARAMETERS
@@ -142,20 +178,3 @@ VALIDATE_OUTPUT = True
 # Expected data shapes/properties
 EXPECTED_N_CHANNELS = 64
 EXPECTED_DOWNSAMPLE_FREQ = 256
-
-print("""
-╔═══════════════════════════════════════════════════════════════════════════╗
-║          MOEREL ET AL. (2025) PREPROCESSING CONFIGURATION                ║
-║                                                                           ║
-║ Pipeline Steps:                                                          ║
-║  1. Common Average Reference (CAR)                                      ║
-║  2. Identify Noisy Channels (visual inspection + automated)            ║
-║  3. Interpolate Bad Channels                                           ║
-║  4. Downsample (2048 Hz → 256 Hz)                                      ║
-║  5. Epoch (Decision, Response, Feedback phases)                        ║
-║  6. Baseline Correction & Time Binning (250 ms)                        ║
-║                                                                           ║
-║ ⚠️  NO FILTERING APPLIED (per authors' recommendation)                  ║
-╚═══════════════════════════════════════════════════════════════════════════╝
-"""
-)
