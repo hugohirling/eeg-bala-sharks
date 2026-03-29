@@ -16,7 +16,7 @@ import paths as _project_paths  # noqa: E402
 BIDS_ROOT = _project_paths.INPUT_DIR
 OUTPUT_DIR = _project_paths.OUTPUT_DIR / "preprocessing"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-BIOSEMI64_MAT_PATH = BASE_DIR / "biosemi64.mat"
+BIOSEMI64_MAT_PATH = _project_paths.BIOSEMI64_MAT
 
 
 # Subjects

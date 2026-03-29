@@ -79,6 +79,7 @@ ch_names_biosemi = [
 
 def _load_biosemi_positions():
     candidates = [
+        str(_project_paths.BIOSEMI64_MAT),
         os.path.join(path_to_data, "biosemi64.mat"),
         os.path.join("author_code", "helper_files", "biosemi64.mat"),
         "biosemi64.mat",

@@ -22,6 +22,9 @@ INPUT_DIR: Path = Path(os.environ.get("EEG_INPUT_DIR", str(_BASE / "input" / "ds
 # e.g.  output/preprocessing/, output/author_code/, output/preprocessing_authors/
 OUTPUT_DIR: Path = Path(os.environ.get("EEG_OUTPUT_DIR", str(_BASE / "output")))
 
+# BioSemi 64-channel layout file used by the author_code scripts.
+BIOSEMI64_MAT: Path = Path(os.environ.get("EEG_BIOSEMI64_MAT", str(_BASE / "biosemi64.mat")))
+
 
 # The subfolders below are created automatically – you normally do not need
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
