@@ -2,151 +2,255 @@
 Pre-processing script (Python version of step1_preprocessing.m):
    - Plot the data so we can identify noisy channels
    - Interpolate noisy channels
-   - Down-sample to 256 Hz (to make the data easier to work with)
+   - Down-sample to 256 Hz
    - Save
 
-Uses MNE-Python instead of FieldTrip.
-
-Notes:
-   - The 2 pairs are in a single file in the raw data. We have to select
-   different channels based on the pair number.
+This script mirrors the MATLAB ordering as closely as practical in MNE:
+   epoch -> optional plot-only filtering -> interpolate -> downsample -> save
 """
 
 import os
-import pandas as pd
-import numpy as np
-import mne
-from scipy.io import loadmat
+import warnings
+from pathlib import Path
 
-# Set the path
-path_to_data = 'MNE-sample-data/ds006761'
-path_to_code = 'author_code/parsed_python'  # Adjust if needed
+import mne
+import numpy as np
+import pandas as pd
+from scipy.io import loadmat, savemat
+
+warnings.filterwarnings("ignore")
+
+# Central path configuration
+import sys
+BASE_DIR = Path(__file__).resolve().parents[2]
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+import paths as _project_paths  # noqa: E402
+
+path_to_data = str(_project_paths.INPUT_DIR)
+OUTPUT_ROOT = _project_paths.OUTPUT_DIR / "author_code"
+OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
 # Set parameters
-# If identify_bad_channels is true, we plot the data so we can identify bad
-# channels. Skip if we've already identified bad channels and want to fix them.
-# To fix bad channels, set interpolate_bad_channels to true. This assumes we
-# have a tsv file called 'participants.tsv' with labels
-# of the bad channels.
 identify_bad_channels = False
 interpolate_bad_channels = True
+num_trials = 480
+DEFAULT_PAIR_IDS = np.concatenate([np.arange(1, 10), np.arange(11, 23), np.arange(25, 35)])
+FS = 2048
 
-# Set parameters
-num_trials = 480  # There were 480 games (trials) in the experiment
-pair_ids = np.concatenate([np.arange(1, 10), np.arange(11, 23), np.arange(25, 35)])  # Pair IDs (Pair 10, 23, 24 excluded)
-num_pairs = len(pair_ids)  # Number of pairs
-FS = 2048  # Biosemi sampling frequency
 
-# Load the demographics - this has information about which channels are bad
-participants = pd.read_csv(os.path.join(path_to_data, 'participants.tsv'), sep='\t')
+def _resolve_pair_ids(default_ids):
+    raw = os.environ.get("RPS_SUBJECTS") or os.environ.get("EEG_SUBJECTS")
+    if not raw:
+        return default_ids
+    parsed = []
+    for token in raw.split(","):
+        token = token.strip().lower().replace("sub-", "")
+        if not token:
+            continue
+        try:
+            parsed.append(int(token))
+        except ValueError:
+            print(f"Warning: invalid subject token ignored: {token}")
+    if not parsed:
+        return default_ids
+    return np.array([sid for sid in parsed if sid in set(default_ids)], dtype=int)
 
-# Load biosemi64 montage
-mat_data = loadmat(os.path.join(path_to_data, 'biosemi64.mat'))
-biosemi64 = mat_data['biosemi64']
 
-# Prepare montage
-# Assuming the labels are standard BioSemi 64
-ch_names_64 = [f'Fp1', 'Fp2', 'F3', 'F4', 'C3', 'C4', 'P3', 'P4', 'O1', 'O2', 'F7', 'F8', 'T7', 'T8', 'P7', 'P8', 'Fz', 'Cz', 'Pz', 'Oz', 'FC1', 'FC2', 'CP1', 'CP2', 'FC5', 'FC6', 'CP5', 'CP6', 'TP9', 'TP10', 'POz', 'ECG', 'EOG', 'EMG', 'GSR', 'Respiration', 'Temp', 'Status', 'EXG1', 'EXG2', 'EXG3', 'EXG4', 'EXG5', 'EXG6', 'EXG7', 'EXG8', 'GSR1', 'GSR2', 'Erg1', 'Erg2', 'Resp', 'Plet', 'Temp', 'EXG1', 'EXG2', 'EXG3', 'EXG4', 'EXG5', 'EXG6', 'EXG7', 'EXG8', 'GSR1', 'GSR2', 'Erg1', 'Erg2']  # This is approximate, need to match
-# Actually, for BioSemi 64, the labels are specific.
-# From the code, it uses layout.label(1:64) from biosemi64.lay, but since we have biosemi64.mat, use that.
+pair_ids = _resolve_pair_ids(DEFAULT_PAIR_IDS)
+num_pairs = len(pair_ids)
+FORCE_REPROCESS = (os.environ.get("RPS_FORCE_REPROCESS", "0").strip().lower() in {"1", "true", "yes", "on"})
 
-# The code uses ft_prepare_layout(struct('layout','biosemi64.lay')); then data_epoch.label(1:64) = layout.label(1:64);
-# So, standard BioSemi 64 labels.
+participants_path = os.path.join(path_to_data, "participants.tsv")
+if os.path.exists(participants_path):
+    participants = pd.read_csv(participants_path, sep="\t")
+else:
+    print(f"Warning: participants.tsv missing: {participants_path}. Bad-channel lookup disabled.")
+    participants = pd.DataFrame(columns=["participant_id"])
 
-# MNE has 'biosemi64' montage
-montage = mne.channels.make_standard_montage('biosemi64')
+# Standard BioSemi-64 labels used in the MATLAB pipeline.
+ch_names_biosemi = [
+    "Fp1", "AF7", "AF3", "F1", "F3", "F5", "F7", "FT7", "FC5", "FC3", "FC1", "C1", "C3", "C5", "T7", "TP7",
+    "CP5", "CP3", "CP1", "P1", "P3", "P5", "P7", "P9", "PO7", "PO3", "O1", "Iz", "Oz", "POz", "Pz", "CPz",
+    "Fpz", "Fp2", "AF8", "AF4", "AFz", "Fz", "F2", "F4", "F6", "F8", "FT8", "FC6", "FC4", "FC2", "FCz", "C2",
+    "C4", "C6", "T8", "TP8", "CP6", "CP4", "CP2", "Cz", "P2", "P4", "P6", "P8", "P10", "PO8", "PO4", "O2",
+]
 
-# But to match the 3D positions, use the mat file
-# biosemi64 is 64x3 positions
-ch_names_biosemi = ['Fp1', 'AF7', 'AF3', 'F1', 'F3', 'F5', 'F7', 'FT7', 'FC5', 'FC3', 'FC1', 'C1', 'C3', 'C5', 'T7', 'TP7', 'CP5', 'CP3', 'CP1', 'P1', 'P3', 'P5', 'P7', 'P9', 'PO7', 'PO3', 'O1', 'Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'Fp2', 'AF8', 'AF4', 'AFz', 'Fz', 'F2', 'F4', 'F6', 'F8', 'FT8', 'FC6', 'FC4', 'FC2', 'FCz', 'C2', 'C4', 'C6', 'T8', 'TP8', 'CP6', 'CP4', 'CP2', 'Cz', 'P2', 'P4', 'P6', 'P8', 'P10', 'PO8', 'PO4', 'O2']  # Standard BioSemi 64
-montage = mne.channels.make_dig_montage(ch_pos=dict(zip(ch_names_biosemi, biosemi64)), coord_frame='head')
 
-# Run pre-processing
-# Load the data. If we want to find bad channels, plot the data for visual
-# inspection. Interpolate bad channels (found in demographics file), down-sample
-# to 256 Hz and save.
+def _load_biosemi_positions():
+    candidates = [
+        os.path.join(path_to_data, "biosemi64.mat"),
+        os.path.join("author_code", "helper_files", "biosemi64.mat"),
+        "biosemi64.mat",
+    ]
+    for cand in candidates:
+        if os.path.exists(cand):
+            mat_data = loadmat(cand)
+            if "biosemi64" in mat_data:
+                return mat_data["biosemi64"]
+    raise FileNotFoundError("Could not find biosemi64.mat in expected locations.")
 
-# Loop over pairs
-for p in range(num_pairs):
-    pair = pair_ids[p]
-    print(f'Loading pair {p+1} of {num_pairs}: {pair}')
 
-    # Get the trigger times (for the start of each trial)
-    events_filename = os.path.join(path_to_data, f'sub-{pair:02d}', 'eeg', f'sub-{pair:02d}_task-RPS_events.tsv')
-    events = pd.read_csv(events_filename, sep='\t')
-    stimonsample = events['onset_sample'].values
+biosemi64 = _load_biosemi_positions()
+montage = mne.channels.make_dig_montage(ch_pos=dict(zip(ch_names_biosemi, biosemi64)), coord_frame="head")
 
-    # Specify the epoch: -0.2 to 5 sec (relative to onset of 'Decision' screen)
-    prestim = 0.2  # epoch start
-    poststim = 5  # epoch end
 
-    # Make trial matrix
-    trl = np.column_stack([stimonsample - int(prestim * FS), stimonsample + int(poststim * FS), stimonsample - stimonsample])  # TRL equivalent
+def _participant_bad_channels(pair, ppt):
+    row = participants[participants["participant_id"] == f"sub-{pair:02d}"]
+    if row.empty:
+        return []
 
-    # Read the raw data
-    raw_filename = os.path.join(path_to_data, f'sub-{pair:02d}', 'eeg', f'sub-{pair:02d}_task-RPS_eeg.bdf')
-    raw = mne.io.read_raw_bdf(raw_filename, preload=True)
+    # MATLAB selects columns [7,12] then picks column by player.
+    # Use those positions when present, fallback to named columns.
+    bad_str = ""
+    try:
+        idx = 6 if ppt == 1 else 11
+        if idx < len(row.columns):
+            bad_str = row.iloc[0, idx]
+    except Exception:
+        bad_str = ""
 
-    # Loop over player 1 and 2 in the pair
-    for ppt in [1, 2]:
-        # Note: In the original, player 1 and 2 are swapped in EEG vs behavioral
-        # Player 1: 2-A1 to 2-A32 & 2-B1 to 2-B32
-        # Player 2: 1-A1 to 1-A32 & 1-B1 to 1-B32
+    if (not isinstance(bad_str, str)) or (bad_str.strip() == ""):
+        fallback_cols = ["player1_pre_processing_channels_fixed", "player2_pre_processing_channels_fixed"]
+        if ppt == 1 and fallback_cols[0] in row.columns:
+            bad_str = row.iloc[0][fallback_cols[0]]
+        if ppt == 2 and fallback_cols[1] in row.columns:
+            bad_str = row.iloc[0][fallback_cols[1]]
+
+    if not isinstance(bad_str, str) or bad_str.strip() == "":
+        return []
+
+    return [c.strip() for c in bad_str.split(",") if c.strip()]
+
+
+def _player_outputs_exist(pair, ppt):
+    out_fif = OUTPUT_ROOT / f"pair-{pair:02d}_player-{ppt}_task-RPS_eeg-epo.fif"
+    out_mat = OUTPUT_ROOT / f"pair-{pair:02d}_player-{ppt}_task-RPS_eeg.mat"
+    return out_fif.exists() and out_mat.exists()
+
+
+for p, pair in enumerate(pair_ids):
+    print(f"Loading pair {p + 1} of {num_pairs}: {pair}")
+
+    players_to_run = []
+    for ppt in (1, 2):
+        if (not FORCE_REPROCESS) and _player_outputs_exist(pair, ppt):
+            print(f"Info: skipping sub-{pair:02d} player-{ppt}, outputs already exist.")
+            continue
+        players_to_run.append(ppt)
+
+    if not players_to_run:
+        print(f"Info: skipping sub-{pair:02d}, all player outputs already exist.")
+        continue
+
+    events_filename = os.path.join(path_to_data, f"sub-{pair:02d}", "eeg", f"sub-{pair:02d}_task-RPS_events.tsv")
+    if not os.path.exists(events_filename):
+        print(f"Warning: skipping sub-{pair:02d}, events missing: {events_filename}")
+        continue
+    try:
+        events = pd.read_csv(events_filename, sep="\t")
+    except Exception as exc:
+        print(f"Warning: skipping sub-{pair:02d}, events unreadable: {exc}")
+        continue
+    stimonsample = events["onset_sample"].to_numpy(dtype=int)
+
+    prestim = 0.2
+    poststim = 5.0
+
+    raw_filename = os.path.join(path_to_data, f"sub-{pair:02d}", "eeg", f"sub-{pair:02d}_task-RPS_eeg.bdf")
+    if not os.path.exists(raw_filename):
+        print(f"Warning: skipping sub-{pair:02d}, BDF missing: {raw_filename}")
+        continue
+    # Keep raw lazy to avoid allocating multi-GB arrays for full recordings.
+    try:
+        raw = mne.io.read_raw_bdf(raw_filename, preload=False)
+    except Exception as exc:
+        print(f"Warning: skipping sub-{pair:02d}, BDF read failed: {exc}")
+        continue
+
+    # Epoch definitions from event sample indices.
+    events_array = np.column_stack(
+        [
+            stimonsample,
+            np.zeros(stimonsample.shape[0], dtype=int),
+            np.ones(stimonsample.shape[0], dtype=int),
+        ]
+    )
+
+    for ppt in players_to_run:
+        # MATLAB player-channel mapping (swapped relative to behavioral labels).
         if ppt == 1:
-            chan_pattern = ['2-A', '2-B']
+            wanted = [ch for ch in raw.ch_names if ("2-A" in ch or "2-B" in ch)]
         else:
-            chan_pattern = ['1-A', '1-B']
+            wanted = [ch for ch in raw.ch_names if ("1-A" in ch or "1-B" in ch)]
 
-        chan_idx = [any(pat in ch for pat in chan_pattern) for ch in raw.ch_names]
-        orig_label = [ch for ch, idx in zip(raw.ch_names, chan_idx) if idx]
+        if len(wanted) < 64:
+            print(f"Pair {pair}, Player {ppt}: expected >=64 channels, found {len(wanted)}. Skipping.")
+            continue
 
-        # Select channels
-        raw_ppt = raw.copy().pick_channels(orig_label)
+        raw_ppt = raw.copy().pick(wanted)
 
-        # Rename the first 64 EEG channels to standard BioSemi labels
-        if len(raw_ppt.ch_names) >= 64:
-            rename_dict = {raw_ppt.ch_names[i]: ch_names_biosemi[i] for i in range(64)}
-            raw_ppt.rename_channels(rename_dict)
-            # Keep only the 64 EEG channels
-            raw_ppt.pick_channels(ch_names_biosemi)
-
-        # Set the montage
+        # Rename first 64 channels to BioSemi labels and keep those 64.
+        rename_dict = {raw_ppt.ch_names[i]: ch_names_biosemi[i] for i in range(64)}
+        raw_ppt.rename_channels(rename_dict)
+        raw_ppt.pick(ch_names_biosemi)
         raw_ppt.set_montage(montage)
 
-        raw_ppt = raw_ppt.resample(256, npad='auto')  # Down-sample to 256 Hz
+        epochs = mne.Epochs(
+            raw_ppt,
+            events_array,
+            event_id={"trial_start": 1},
+            tmin=-prestim,
+            tmax=poststim,
+            baseline=None,
+            preload=True,
+            reject_by_annotation=False,
+        )
 
-        # Epoch the data
-        events_array = np.column_stack([trl[:, 0], np.zeros(len(trl), dtype=int), np.ones(len(trl), dtype=int)])  # onset, prev, event_id
-        epochs = mne.Epochs(raw_ppt, events_array, event_id=1, tmin=-prestim, tmax=poststim, baseline=None, preload=True)
-
-        # Do we want to plot the data to identify bad channels?
         if identify_bad_channels:
-            # Highpass and lowpass filter for plotting
-            epochs_f = epochs.copy().filter(l_freq=0.1, h_freq=100, method='iir', iir_params=dict(order=4, ftype='butter'))
-            epochs_f.plot(n_epochs=10, n_channels=64, scalings='auto', title=f'Pair {pair}, Player {ppt}')
+            # Plot-only filter (no filtering in saved data).
+            epochs_f = epochs.copy().filter(
+                l_freq=0.1,
+                h_freq=100.0,
+                method="iir",
+                iir_params={"order": 4, "ftype": "butter"},
+            )
+            epochs_f.plot(n_epochs=min(20, len(epochs_f)), n_channels=64, scalings="auto", title=f"Pair {pair}, Player {ppt}")
 
-        # Do we want to interpolate the bad channels?
         if interpolate_bad_channels:
-            # Get the channels to fix for this ppt
-            row = participants[participants['participant_id'] == f'sub-{pair:02d}']
-            if ppt == 1:
-                bad_chans_str = row['player1_pre_processing_channels_fixed'].values[0]
-            else:
-                bad_chans_str = row['player2_pre_processing_channels_fixed'].values[0]
+            bad_chans = _participant_bad_channels(pair, ppt)
+            if bad_chans:
+                valid_bads = [ch for ch in bad_chans if ch in epochs.ch_names]
+                if valid_bads:
+                    epochs.info["bads"] = valid_bads
+                    epochs.interpolate_bads(reset_bads=True)
+                    print(f"pair {pair}, player {ppt}: fixed {', '.join(valid_bads)}")
 
-            if pd.notna(bad_chans_str) and bad_chans_str != '':
-                bad_chans = [ch.strip() for ch in bad_chans_str.split(',')]
-                # Interpolate bad channels
-                epochs.info['bads'] = bad_chans
-                epochs.interpolate_bads()
-                print(f'Pair {pair}, Player {ppt}: fixed {bad_chans_str}')
+            # Downsample once at end, as in MATLAB workflow.
+            epochs_ds = epochs.copy().resample(256)
 
-            # Down-sample the data to 256 Hz
-            epochs_resampled = epochs.copy().resample(256)
+            # Save FIF (used by parsed_python step2a).
+            out_fif = str(OUTPUT_ROOT / f"pair-{pair:02d}_player-{ppt}_task-RPS_eeg-epo.fif")
+            os.makedirs(os.path.dirname(out_fif), exist_ok=True)
+            epochs_ds.save(out_fif, overwrite=True)
 
-            # Save the epoched data
-            save_path = os.path.join(path_to_data, 'derivatives', f'pair-{pair:02d}_player-{ppt}_task-RPS_eeg-epo.fif')
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            epochs_resampled.save(save_path, overwrite=True)
+            # Save lightweight MAT for easier MATLAB-side checks.
+            out_mat = str(OUTPUT_ROOT / f"pair-{pair:02d}_player-{ppt}_task-RPS_eeg.mat")
+            savemat(
+                out_mat,
+                {
+                    "eeg_data": epochs_ds.get_data(),
+                    "times": epochs_ds.times,
+                    "ch_names": np.array(epochs_ds.ch_names, dtype=object),
+                    "sfreq": float(epochs_ds.info["sfreq"]),
+                },
+            )
 
-print('Preprocessing completed.')
+            # Free memory before moving to the next participant stream.
+            del epochs_ds
+        del epochs
+        del raw_ppt
+
+    del raw
+
+print("Preprocessing completed.")

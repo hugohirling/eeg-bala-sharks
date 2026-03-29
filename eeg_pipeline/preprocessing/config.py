@@ -1,12 +1,20 @@
 # config.py
+import sys
 from pathlib import Path
 
 from helper.general.subject_resolution import resolve_subjects
 
 # Paths
-BASE_DIR = Path(__file__).parent.parent.parent  # EEG_Bala Sharks
-BIDS_ROOT = BASE_DIR / "input" / "ds006761"
-OUTPUT_DIR = BASE_DIR / "output" / "preprocessing"
+BASE_DIR = Path(__file__).parent.parent.parent  # project root (eeg-bala-sharks/)
+
+# Make project root importable so `paths` can be loaded from anywhere.
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+import paths as _project_paths  # noqa: E402
+
+BIDS_ROOT = _project_paths.INPUT_DIR
+OUTPUT_DIR = _project_paths.OUTPUT_DIR / "preprocessing"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 BIOSEMI64_MAT_PATH = BASE_DIR / "biosemi64.mat"
 

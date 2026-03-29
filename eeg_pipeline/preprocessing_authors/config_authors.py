@@ -5,18 +5,15 @@ Moerel et al. (2025) preprocessing methodology
 
 from pathlib import Path
 
-from preprocessing import config
+from preprocessing import config  # also registers project root on sys.path
+import paths as _project_paths  # noqa: E402
 
 # ============================================================================
 # DATA PATHS
 # ============================================================================
 
-# Root directory containing raw EEG data
-DATA_ROOT = "data/raw"
-
-# Output directory for preprocessed data
-OUTPUT_ROOT = "output/preprocessing_authors"
-DEFAULT_OUTPUT_DIR = Path(config.BASE_DIR) / OUTPUT_ROOT
+#: Output directory for the authors pipeline (sub-folder of the central OUTPUT_DIR).
+DEFAULT_OUTPUT_DIR: Path = _project_paths.OUTPUT_DIR / "preprocessing_authors"
 
 # ============================================================================
 # PIPELINE ORCHESTRATION
