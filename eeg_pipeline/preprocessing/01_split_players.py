@@ -8,6 +8,15 @@ PIPELINE_DIR = CURRENT_DIR.parent
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s"
+)
+
+LOGGER = logging.getLogger(__name__)
+
 from preprocessing import config
 from helper.general.helper_functions import get_step_io_files, save_current_step_file
 
@@ -47,7 +56,7 @@ def split_players(subject_id):
     if path_in is None:
         raise ValueError("Split step requires an input file from the previous pipeline step")
 
-    print(f"Loading previous step file: {path_in}")
+    LOGGER.info(f"Subject {subject_id}: Starting player split step.")
     raw = mne.io.read_raw_fif(path_in, preload=True)
 
     outputs = []
@@ -71,7 +80,7 @@ def split_players(subject_id):
             person=person,
             step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
         )
-        print(f"Saved split file ({person}) to: {out_path}")
+        LOGGER.info(f"Saved split file ({person}) to: {out_path}")
         outputs.append((person, out_path))
 
     return outputs

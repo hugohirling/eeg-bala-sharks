@@ -10,6 +10,15 @@ PIPELINE_DIR = CURRENT_DIR.parent
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s"
+)
+
+LOGGER = logging.getLogger(__name__)
+
 from preprocessing import config
 from helper.general.helper_functions import get_step_io_files, save_current_step_file
 
@@ -29,6 +38,13 @@ def _make_biosemi64_montage(raw):
             f"Expected biosemi64 shape (64, 3), got {positions.shape}"
         )
 
+    # Convert from mm to meters if necessary (biosemi64.mat is typically in mm)
+    # Check if the head radius would be reasonable in meters
+    mean_distance = np.linalg.norm(positions, axis=1).mean()
+    if mean_distance > 1:  # If mean distance > 1m, likely in millimeters
+        LOGGER.info(f"BioSemi positions appear to be in mm (mean distance: {mean_distance:.2f}). Converting to meters.")
+        positions = positions / 1000.0
+    
     # Keep original 3D coordinates from biosemi64.mat to stay aligned with
     # the FieldTrip preprocessing reference (elec.pnt = biosemi64).
     ordered_labels = list(config.channel_labels.values())
@@ -40,6 +56,7 @@ def _make_biosemi64_montage(raw):
     if not ch_pos:
         raise ValueError("No BioSemi labels matched the current raw channel names")
 
+    LOGGER.info(f"Setting montage for {len(ch_pos)} channels based on biosemi64.mat template")
     return mne.channels.make_dig_montage(ch_pos=ch_pos, coord_frame="head")
 
 
@@ -84,7 +101,8 @@ def rename_and_set_montage(subject_id):
         if path_in is None:
             raise ValueError("Rename/montage step requires split input files")
 
-        print(f"Loading previous step file ({person}): {path_in}")
+        LOGGER.info(f"Processing subject {subject_id}, person {person}")
+        LOGGER.info(f"Loading previous step file ({person}): {path_in}")
         raw = mne.io.read_raw_fif(path_in, preload=True)
 
         _rename_eeg_channels(raw, person)
@@ -99,7 +117,7 @@ def rename_and_set_montage(subject_id):
             person=person,
             step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
         )
-        print(f"Saved renamed+montaged file ({person}) to: {out_path}")
+        LOGGER.info(f"Saved renamed+montaged file ({person}) to: {out_path}")
         outputs.append((person, out_path))
 
     return outputs
