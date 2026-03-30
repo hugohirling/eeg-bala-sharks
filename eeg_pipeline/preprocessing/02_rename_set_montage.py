@@ -1,3 +1,5 @@
+# This file has been commented using GitHub Copilot with the Grok Code Fast 1 model.
+
 from pathlib import Path
 import sys
 
@@ -24,6 +26,24 @@ from helper.general.helper_functions import get_step_io_files, save_current_step
 
 
 def _make_biosemi64_montage(raw):
+    """
+    Creates a BioSemi64 montage from the template file.
+
+    This function loads the BioSemi64 electrode positions from a .mat file,
+    converts units if necessary, and creates a digitization montage for the
+    channels present in the raw data.
+
+    Args:
+        raw (mne.io.Raw): The raw data to create the montage for.
+
+    Returns:
+        mne.channels.DigMontage: The created montage object.
+
+    Raises:
+        FileNotFoundError: If the BioSemi template file is missing.
+        KeyError: If the expected variable is not in the .mat file.
+        ValueError: If the positions array has unexpected shape or no matching channels.
+    """
     mat_path = Path(config.BIOSEMI64_MAT_PATH)
     if not mat_path.exists():
         raise FileNotFoundError(f"Missing BioSemi template: {mat_path}")
@@ -61,11 +81,22 @@ def _make_biosemi64_montage(raw):
 
 
 def _rename_eeg_channels(raw, person):
+    """
+    Renames EEG channels according to the BioSemi64 standard.
+
+    This function strips player prefixes, removes unwanted channels (starting with 'C' or 'D'),
+    and maps channels to 10-20 system labels.
+
+    Args:
+        raw (mne.io.Raw): The raw data to modify.
+        person (str): The player identifier ('P1' or 'P2').
+    """
     source_prefix = config.PLAYER_PREFIX_MAP[person]
 
     eeg_picks = mne.pick_types(raw.info, eeg=True)
     eeg_channels = [raw.ch_names[idx] for idx in eeg_picks]
 
+    # Strip the player prefix from EEG channels
     strip_prefix_map = {
         ch: ch[len(source_prefix):]
         for ch in eeg_channels
@@ -79,6 +110,7 @@ def _rename_eeg_channels(raw, person):
     if channels_to_drop:
         raw.drop_channels(channels_to_drop)
 
+    # Map to 10-20 system labels
     mapping_1020 = {
         ch: config.channel_labels[ch]
         for ch in raw.ch_names
@@ -89,6 +121,18 @@ def _rename_eeg_channels(raw, person):
 
 
 def rename_and_set_montage(subject_id):
+    """
+    Renames channels and sets the BioSemi64 montage for both players.
+
+    This function processes each player's data file, renames channels,
+    applies the BioSemi64 montage, and saves the updated files.
+
+    Args:
+        subject_id (str): The subject identifier.
+
+    Returns:
+        list[tuple[str, Path]]: List of tuples with player ID and output file path.
+    """
     outputs = []
     for person in ["P1", "P2"]:
         path_in, _ = get_step_io_files(
@@ -124,5 +168,6 @@ def rename_and_set_montage(subject_id):
 
 
 if __name__ == "__main__":
+    # Process all subjects
     for subj in config.SUBJECTS:
         rename_and_set_montage(subj)
