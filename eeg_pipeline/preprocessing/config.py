@@ -79,8 +79,13 @@ BAD_CHANNELS_FILE = BIDS_ROOT / "participants.tsv"
 # Automatic bad-channel detection (robust z-score on channel STD).
 BAD_CHANNEL_ZSCORE_THRESHOLD = 4.0
 BAD_CHANNEL_FLAT_STD_THRESHOLD = 1e-12
+# Parallel workers for step 03 (subject-level parallelism).
+# Keep at 1 for conservative I/O; increase to 2-4 on fast SSDs.
+BAD_CHANNEL_N_JOBS = 4
 BAD_CHANNELS_DIR = OUTPUT_DIR / "bad_channels"
 BAD_CHANNELS_DIR.mkdir(parents=True, exist_ok=True)
+QC_DIR = OUTPUT_DIR / "sanity_checks"
+QC_DIR.mkdir(parents=True, exist_ok=True)
 ICA_DIR = OUTPUT_DIR / "ica"
 ICA_DIR.mkdir(parents=True, exist_ok=True)
 

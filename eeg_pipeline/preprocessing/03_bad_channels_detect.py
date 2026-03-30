@@ -2,6 +2,7 @@ from pathlib import Path
 import sys
 import csv
 import shutil
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import mne
 import numpy as np
@@ -197,6 +198,25 @@ def detect_bad_channels(subject_id):
 
 
 if __name__ == "__main__":
-    for i, subj in enumerate(config.SUBJECTS):
-        detect_bad_channels(subj)
-        LOGGER.info(f"PROGRESS:{i + 1}")
+    subjects = list(config.SUBJECTS)
+    n_jobs = max(1, int(getattr(config, "BAD_CHANNEL_N_JOBS", 1)))
+
+    if n_jobs == 1 or len(subjects) <= 1:
+        for i, subj in enumerate(subjects):
+            detect_bad_channels(subj)
+            LOGGER.info(f"PROGRESS:{i + 1}")
+    else:
+        completed = 0
+        LOGGER.info(f"Running bad-channel detection with {n_jobs} workers")
+        with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+            future_to_subject = {executor.submit(detect_bad_channels, subj): subj for subj in subjects}
+            for future in as_completed(future_to_subject):
+                subject = future_to_subject[future]
+                try:
+                    future.result()
+                except Exception:
+                    LOGGER.exception(f"Failed bad-channel detection for subject {subject}")
+                    raise
+
+                completed += 1
+                LOGGER.info(f"PROGRESS:{completed}")
