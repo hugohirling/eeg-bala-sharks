@@ -16,7 +16,7 @@ _BASE = Path(__file__).resolve().parent
 
 # BIDS root – the folder that contains the input data
 # e.g. for data on a USB stick: Path(r"E:\ds006761")  or  Path(r"D:\my_data\ds006761")
-INPUT_DIR: Path = Path(os.environ.get("EEG_INPUT_DIR", str(_BASE / "input" / "ds006761")))
+INPUT_DIR: Path = Path(os.environ.get("EEG_INPUT_DIR", str(_BASE / "MNE-sample-data" / "ds006761")))
 
 # Base output folder – every pipeline component writes into a subfolder here.
 # e.g.  output/preprocessing/, output/author_code/, output/preprocessing_authors/
