@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import process
 import logging
 import os
 import subprocess
@@ -25,6 +24,74 @@ from helper.general.helper_functions import get_previous_step_file
 
 PIPELINE_STEPS = config.PIPELINE_STEPS
 PERSON_SPECIFIC_STEPS = config.PERSON_SPECIFIC_STEPS
+
+
+def _normalize_step_alias(value: str) -> str:
+    token = value.strip().lower().replace("\\", "/")
+    token = token.replace(".py", "")
+    token = token.replace("preprocessing/", "")
+    if "_" in token and token.split("_", 1)[0].isdigit():
+        token = token.split("_", 1)[1]
+    alias_map = {
+        "downsampling": "downsample",
+        "filtering": "filter",
+        "epoching": "epoch",
+        "interpolate": "interpolate_bad_channels",
+        "badchannels": "bad_channels_detect",
+    }
+    return alias_map.get(token, token)
+
+
+def _build_step_lookup(available_steps: list[str]) -> dict[str, str]:
+    lookup: dict[str, str] = {}
+    for step in available_steps:
+        path_token = step.replace("\\", "/")
+        basename = Path(step).name
+        stem = Path(step).stem
+        short = stem.split("_", 1)[1] if "_" in stem and stem.split("_", 1)[0].isdigit() else stem
+
+        aliases = {
+            path_token,
+            path_token.lower(),
+            basename,
+            basename.lower(),
+            stem,
+            stem.lower(),
+            short,
+            short.lower(),
+            _normalize_step_alias(path_token),
+            _normalize_step_alias(basename),
+            _normalize_step_alias(stem),
+            _normalize_step_alias(short),
+        }
+        for alias in aliases:
+            lookup[alias] = step
+    return lookup
+
+
+def _resolve_step_tokens(step_tokens: list[str], available_steps: list[str], *, arg_name: str) -> list[str]:
+    lookup = _build_step_lookup(available_steps)
+    resolved: list[str] = []
+    for token in step_tokens:
+        key = _normalize_step_alias(token)
+        if key in lookup:
+            resolved.append(lookup[key])
+            continue
+        key = token.replace("\\", "/")
+        if key in lookup:
+            resolved.append(lookup[key])
+            continue
+        valid = ", ".join(available_steps)
+        raise ValueError(f"Unknown value in {arg_name}: '{token}'. Valid step files: {valid}")
+
+    seen: set[str] = set()
+    unique = [step for step in resolved if not (step in seen or seen.add(step))]
+    return unique
+
+
+def _apply_skip_steps(selected_steps: list[str], skip_steps: list[str]) -> list[str]:
+    skip_set = set(skip_steps)
+    return [step for step in selected_steps if step not in skip_set]
 
 
 def prompt_subject_selection(all_subjects: list[str]) -> list[str]:
@@ -336,6 +403,15 @@ def parse_args() -> argparse.Namespace:
         help="Optional subset of step filenames to run in order.",
     )
     parser.add_argument(
+        "--skip-steps",
+        nargs="+",
+        default=[],
+        help=(
+            "Steps to skip. Accepts full paths or short names like downsample, "
+            "bad_channels_detect, filter, ica, epoch."
+        ),
+    )
+    parser.add_argument(
         "--skip-preflight",
         action="store_true",
         help="Skip input existence checks before running steps.",
@@ -365,7 +441,17 @@ def main() -> int:
 
     args = parse_args()
 
-    steps = args.steps
+    try:
+        selected_steps = _resolve_step_tokens(args.steps, PIPELINE_STEPS, arg_name="--steps")
+        skip_steps = _resolve_step_tokens(args.skip_steps, PIPELINE_STEPS, arg_name="--skip-steps") if args.skip_steps else []
+    except ValueError as exc:
+        LOGGER.error(str(exc))
+        return 1
+
+    steps = _apply_skip_steps(selected_steps, skip_steps)
+    if not steps:
+        LOGGER.error("No steps left to run after applying --skip-steps.")
+        return 1
 
     all_subjects = config.SUBJECTS
     if not all_subjects:
@@ -386,6 +472,8 @@ def main() -> int:
     LOGGER.info("Starting EEG pipeline runner")
     LOGGER.info(f"Subjects ({len(chosen)}): {config.SUBJECTS}")
     LOGGER.info(f"Steps: {steps}")
+    if skip_steps:
+        LOGGER.info(f"Skipped steps: {skip_steps}")
 
     return run_pipeline(steps, skip_preflight=args.skip_preflight)
 

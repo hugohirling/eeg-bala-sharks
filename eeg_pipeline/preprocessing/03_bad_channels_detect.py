@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 import csv
+import shutil
 
 import mne
 import numpy as np
@@ -21,6 +22,9 @@ LOGGER = logging.getLogger(__name__)
 
 from preprocessing import config
 from helper.general.helper_functions import get_step_io_files, save_current_step_file
+
+
+_BAD_CHANNEL_ROWS_CACHE = None
 
 
 def _compute_robust_z(values):
@@ -54,6 +58,8 @@ def _parse_bad_channel_list(value):
 
 
 def _get_bad_channels_for_subject(subject_id, person):
+    global _BAD_CHANNEL_ROWS_CACHE
+
     file_path = config.BAD_CHANNELS_FILE
     if file_path is None:
         return []
@@ -63,7 +69,10 @@ def _get_bad_channels_for_subject(subject_id, person):
         print(f"Bad-channels file not found: {table_path}. Skipping manual bad-channel merge.")
         return []
 
-    participants = _read_tsv_rows(table_path)
+    if _BAD_CHANNEL_ROWS_CACHE is None:
+        _BAD_CHANNEL_ROWS_CACHE = _read_tsv_rows(table_path)
+
+    participants = _BAD_CHANNEL_ROWS_CACHE
     if not participants:
         return []
 
@@ -107,7 +116,7 @@ def _write_qc_report(subject_id, person, channel_names, std_values, z_scores, re
 def detect_bad_channels(subject_id):
     outputs = []
     for person in ["P1", "P2"]:
-        path_in, _ = get_step_io_files(
+        path_in, out_path = get_step_io_files(
             subject_id,
             __file__,
             person=person,
@@ -118,7 +127,7 @@ def detect_bad_channels(subject_id):
             raise ValueError("Bad-channel detection step requires rename+montage input files")
 
         LOGGER.info(f"Loading previous step file ({person}): {path_in}")
-        raw = mne.io.read_raw_fif(path_in, preload=True)
+        raw = mne.io.read_raw_fif(path_in, preload=False)
 
         eeg_picks = mne.pick_types(raw.info, eeg=True, exclude=[])
         if len(eeg_picks) == 0:
@@ -167,13 +176,20 @@ def detect_bad_channels(subject_id):
 
             LOGGER.info(f"No bad-channel suggestions for {subject_id} {person}.")
 
-        out_path = save_current_step_file(
-            raw,
-            subject_id,
-            __file__,
-            person=person,
-            step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
-        )
+        if set(merged_bads) == existing_bads:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path_in, out_path)
+            LOGGER.info(
+                f"No bad-channel metadata change ({person}); copied input file to output without re-saving: {out_path}"
+            )
+        else:
+            out_path = save_current_step_file(
+                raw,
+                subject_id,
+                __file__,
+                person=person,
+                step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
+            )
         LOGGER.info(f"Saved detection output ({person}) to: {out_path}")
         outputs.append((person, out_path, report_path, suggested_bads))
 
