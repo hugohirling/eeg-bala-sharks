@@ -78,7 +78,7 @@ def process_subject(subject_id):
         )
         LOGGER.info(f"Saved ICA-cleaned file ({person}) to: {out_path}")
 
-        ica_path = config.QC_DIR / f"sub-{subject_id}_{person}_ica.fif"
+        ica_path = config.ICA_DIR / f"sub-{subject_id}_{person}_ica.fif"
         ica.save(ica_path, overwrite=True)
         LOGGER.info(f"Saved ICA decomposition ({person}) to: {ica_path}")
 

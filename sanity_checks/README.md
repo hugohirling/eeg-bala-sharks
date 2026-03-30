@@ -14,6 +14,7 @@ Diese Verzeichnis enthält Sanity-Check Scripts für jeden Schritt der EEG-Prepr
 | 05 | `scripts/sc_05_filter.py` | Bandpass-Filter angewendet (1-40 Hz), PSD-Reduktion sichtbar |
 | 06 | `scripts/sc_06_ica.py` | ICA Komponenten extrahiert, EOG-Artefakte erkannt |
 | 07 | `scripts/sc_07_epoch.py` | Epochs erstellt, Event-Typen korrekt, Zeit-Fenster passen |
+| 08 | `scripts/sc_08_pipeline_progression_plots.py` | Vergleichsgrafiken Original vs. Processing-Steps (GFP + PSD) |
 
 ## Verwendung
 
@@ -23,6 +24,11 @@ Diese Verzeichnis enthält Sanity-Check Scripts für jeden Schritt der EEG-Prepr
 ### Einzelnen Sanity Check ausführen
 ```bash
 python sanity_checks/scripts/sc_00_downsample.py
+```
+
+### Vergleichsgrafiken über die ganze Pipeline erzeugen
+```bash
+python sanity_checks/scripts/sc_08_pipeline_progression_plots.py
 ```
 
 ### Alle Sanity Checks in Folge (optional, können später in Master-Pipeline integriert werden)
@@ -37,6 +43,10 @@ for script in sanity_checks/scripts/sc_*.py; do python $script; done
   - `sub-01_P1_bad_channels_detect.tsv` (aus Step 03)
   - `sub-01_P1_filter_psd_comparison.png` (aus Step 05)
   - `sub-01_P1_ica.fif` (aus Step 06)
+  - `sub-01_P1_pipeline_progression_gfp_psd.png` (Original -> alle verfügbaren Steps)
+  - `sub-01_P1_original_vs_latest_gfp_psd.png` (direkter Vorher/Nachher-Vergleich)
+  - `sub-01_P1_original_vs_latest_butterfly.png` (Butterfly-Zeitbereich: mehrere EEG-Kanäle)
+  - `sub-01_P1_step_transition_filter_to_ica_clean.png` (direkter Vergleich je Pipeline-Übergang)
 
 ## Hinweise
 

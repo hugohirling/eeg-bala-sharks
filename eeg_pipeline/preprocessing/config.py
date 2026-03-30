@@ -72,15 +72,17 @@ PLAYER_PREFIX_MAP = {
     "P2": "1-",
 }
 
-# Optional TSV with bad-channel annotations.
-# Leave as None to skip manual interpolation lists.
-BAD_CHANNELS_FILE = None
+# Optional TSV with bad-channel annotations from the BIDS dataset.
+# Set to None to disable manual bad-channel lists.
+BAD_CHANNELS_FILE = BIDS_ROOT / "participants.tsv"
 
 # Automatic bad-channel detection (robust z-score on channel STD).
 BAD_CHANNEL_ZSCORE_THRESHOLD = 4.0
 BAD_CHANNEL_FLAT_STD_THRESHOLD = 1e-12
-QC_DIR = BASE_DIR / "output" / "qc"
-QC_DIR.mkdir(parents=True, exist_ok=True)
+BAD_CHANNELS_DIR = OUTPUT_DIR / "bad_channels"
+BAD_CHANNELS_DIR.mkdir(parents=True, exist_ok=True)
+ICA_DIR = OUTPUT_DIR / "ica"
+ICA_DIR.mkdir(parents=True, exist_ok=True)
 
 # Epoching
 MAX_EPOCHS = 500
@@ -179,8 +181,8 @@ channel_labels = {
 }
 
 channel_types = {
-    "Erg1": "eog",
-    "Erg2": "eog",
+    "Erg1": "bio",
+    "Erg2": "bio",
     "Resp": "resp",
     "Plet": "misc",
     "Temp": "temperature",
