@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import csv
 
 import mne
 import numpy as np
@@ -21,8 +22,68 @@ def _compute_robust_z(values):
     return 0.6745 * (values - median) / mad
 
 
+def _read_tsv_rows(file_path):
+    with file_path.open("r", encoding="utf-8", newline="") as file_obj:
+        reader = csv.DictReader(file_obj, delimiter="\t")
+        rows = []
+        for row in reader:
+            rows.append({str(key).strip().lower(): value for key, value in row.items()})
+        return rows
+
+
+def _parse_bad_channel_list(value):
+    if value is None:
+        return []
+    if isinstance(value, str) and value.strip().lower() in {"nan", "na", "none"}:
+        return []
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return []
+        return [entry.strip() for entry in cleaned.replace(";", ",").split(",") if entry.strip()]
+    return []
+
+
+def _get_bad_channels_for_subject(subject_id, person):
+    file_path = config.BAD_CHANNELS_FILE
+    if file_path is None:
+        return []
+
+    table_path = Path(file_path)
+    if not table_path.exists():
+        print(f"Bad-channels file not found: {table_path}. Skipping manual bad-channel merge.")
+        return []
+
+    participants = _read_tsv_rows(table_path)
+    if not participants:
+        return []
+
+    subject_label = f"sub-{subject_id}"
+    if "participant_id" not in participants[0]:
+        print("Column 'participant_id' not found in bad-channels table. Skipping manual bad-channel merge.")
+        return []
+
+    row = next((entry for entry in participants if entry.get("participant_id") == subject_label), None)
+    if row is None:
+        return []
+
+    person_columns = [
+        f"player{person[-1]}_pre_processing_channels_fixed",
+        f"bad_channels_{person.lower()}",
+        f"bad_channels_player{person[-1]}",
+        f"bad_{person.lower()}",
+        "bad_channels",
+    ]
+
+    for column in person_columns:
+        if column in row:
+            return _parse_bad_channel_list(row.get(column))
+
+    return []
+
+
 def _write_qc_report(subject_id, person, channel_names, std_values, z_scores, reasons):
-    report_path = config.QC_DIR / f"sub-{subject_id}_{person}_bad_channels_detect.tsv"
+    report_path = config.BAD_CHANNELS_DIR / f"sub-{subject_id}_{person}_bad_channels_detect.tsv"
     with report_path.open("w", encoding="utf-8", newline="") as file_obj:
         file_obj.write("subject_id\tperson\tchannel\tstd\trobust_z\tsuggested\treason\n")
         for channel, std_value, z_value, reason in zip(channel_names, std_values, z_scores, reasons):
@@ -59,19 +120,27 @@ def detect_bad_channels(subject_id):
         std_values = np.std(channel_data, axis=1)
         z_scores = _compute_robust_z(std_values)
 
+        manual_bads = set(_get_bad_channels_for_subject(subject_id, person))
+        manual_bads = {channel for channel in manual_bads if channel in raw.ch_names}
+
         reasons = []
         suggested_bads = []
+        auto_suggested_bads = []
         for channel, std_value, z_value in zip(channel_names, std_values, z_scores):
             channel_reasons = []
             if std_value <= config.BAD_CHANNEL_FLAT_STD_THRESHOLD:
                 channel_reasons.append("flat")
             if abs(z_value) >= config.BAD_CHANNEL_ZSCORE_THRESHOLD:
                 channel_reasons.append("outlier_std")
+            if channel in manual_bads:
+                channel_reasons.append("manual_tsv")
 
             reason_text = ",".join(channel_reasons)
             reasons.append(reason_text)
             if reason_text:
                 suggested_bads.append(channel)
+            if "flat" in channel_reasons or "outlier_std" in channel_reasons:
+                auto_suggested_bads.append(channel)
 
         existing_bads = set(raw.info.get("bads", []))
         merged_bads = sorted(existing_bads.union(suggested_bads))
@@ -79,8 +148,12 @@ def detect_bad_channels(subject_id):
 
         report_path = _write_qc_report(subject_id, person, channel_names, std_values, z_scores, reasons)
         print(f"Saved bad-channel QC report ({person}) to: {report_path}")
+        if manual_bads:
+            print(f"Manual bad channels from TSV for {subject_id} {person}: {', '.join(sorted(manual_bads))}")
+        if auto_suggested_bads:
+            print(f"Auto-suggested bad channels for {subject_id} {person}: {', '.join(auto_suggested_bads)}")
         if suggested_bads:
-            print(f"Suggested bad channels for {subject_id} {person}: {', '.join(suggested_bads)}")
+            print(f"Final bad channels marked for {subject_id} {person}: {', '.join(suggested_bads)}")
         else:
             print(f"No bad-channel suggestions for {subject_id} {person}.")
 
