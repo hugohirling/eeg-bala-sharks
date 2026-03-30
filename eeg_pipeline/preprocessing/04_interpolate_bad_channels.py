@@ -37,15 +37,20 @@ def interpolate_bad_channels(subject_id):
         LOGGER.info(f"Loading previous step file ({person}): {path_in}")
         raw = mne.io.read_raw_fif(path_in, preload=True)
 
+        # Get bad channels and filter to only EEG channels (A and B), exclude C and D
         bad_channels = list(raw.info.get("bads", []))
         bad_channels = [ch for ch in bad_channels if ch in raw.ch_names]
-
-        if bad_channels:
-            raw.info["bads"] = bad_channels
+        
+        # Only interpolate A and B channels (actual EEG), skip C and D
+        valid_bad_channels = [ch for ch in bad_channels if ch.startswith(("A", "B"))]
+        
+        if valid_bad_channels:
+            raw.info["bads"] = valid_bad_channels
             raw.interpolate_bads(reset_bads=True)
-            LOGGER.info(f"Interpolated bad channels for {subject_id} {person}: {', '.join(bad_channels)}")
+            LOGGER.info(f"Interpolated bad channels for {subject_id} {person}: {', '.join(valid_bad_channels)}")
         else:
-            LOGGER.info(f"No bad channels marked in Step 03 for {subject_id} {person}.")
+            raw.info["bads"] = []
+            LOGGER.info(f"No bad A/B channels to interpolate for {subject_id} {person}.")
 
         out_path = save_current_step_file(
             raw,
