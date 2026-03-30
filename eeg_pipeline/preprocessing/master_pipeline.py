@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import process
 import logging
 import os
 import subprocess
 import sys
 from pathlib import Path
+import mne
+from rich.console import Console
+from rich.live import Live
+from rich.logging import RichHandler
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 
 CURRENT_DIR = Path(__file__).resolve().parent
 PIPELINE_DIR = CURRENT_DIR.parent
@@ -65,6 +71,10 @@ def prompt_subject_selection(all_subjects: list[str]) -> list[str]:
         return unique
 
 
+# Shared Rich console here so progress and logging share the same terminal object.
+CONSOLE = Console()
+
+
 def setup_logger() -> logging.Logger:
     logger = logging.getLogger("eeg_pipeline")
     logger.setLevel(logging.INFO)
@@ -72,11 +82,44 @@ def setup_logger() -> logging.Logger:
     if logger.handlers:
         return logger
 
-    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(formatter)
+    try:
+        handler = RichHandler(
+            console=CONSOLE,
+            rich_tracebacks=True,
+            markup=True,
+            show_time=True,
+            show_level=True,
+            show_path=False,
+        )
+        formatter = logging.Formatter("%(message)s")
+        handler.setFormatter(formatter)
+    except ImportError:
+        formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(formatter)
+
     logger.addHandler(handler)
     return logger
+
+# Expose a shared module-level logger for step scripts.
+LOGGER = setup_logger()
+
+def setup_pipeline_progress() -> Progress:
+    progress_bar = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TextColumn("•"),
+        TimeElapsedColumn(),
+        TextColumn("•"),
+        TimeRemainingColumn(),
+        console=CONSOLE,
+        transient=False,
+        refresh_per_second=10,
+    )
+    return progress_bar
+
+PIPELINE_PROGRESS = setup_pipeline_progress()
 
 
 def _input_requirements_for_step(step_file: str, subject_id: str) -> list[Path]:
@@ -100,7 +143,7 @@ def _input_requirements_for_step(step_file: str, subject_id: str) -> list[Path]:
     return required_inputs
 
 
-def preflight_check_for_step(step_file: str, logger: logging.Logger) -> list[str]:
+def preflight_check_for_step(step_file: str) -> list[str]:
     missing_messages: list[str] = []
 
     for subject_id in config.SUBJECTS:
@@ -113,35 +156,72 @@ def preflight_check_for_step(step_file: str, logger: logging.Logger) -> list[str
             )
 
     if missing_messages:
-        logger.error(f"Preflight failed for step {step_file}: required input files are missing.")
+        LOGGER.error(f"Preflight failed for step {step_file}: required input files are missing.")
         for message in missing_messages:
-            logger.error(message)
+            LOGGER.error(message)
 
     return missing_messages
 
 
-def run_pipeline(steps: list[str], logger: logging.Logger, skip_preflight: bool = False) -> int:
-    for index, step_file in enumerate(steps, start=1):
-        step_path = PIPELINE_DIR / step_file
-        if not step_path.exists():
-            logger.error(f"Step file not found: {step_path}")
-            return 1
+def run_pipeline(steps: list[str], skip_preflight: bool = False) -> int:
+    progress = setup_pipeline_progress()
+    with Live(progress, console=CONSOLE, refresh_per_second=1) as live:
+        progress_task_id = progress.add_task("Pipeline progress", total=len(steps))
+        progress_task_id_subjects = progress.add_task("Subjects", total=len(config.SUBJECTS))
 
-        if not skip_preflight:
-            missing = preflight_check_for_step(step_file, logger)
-            if missing:
-                logger.error(f"Stopping pipeline before {step_file} due to missing inputs.")
+        for index, step_file in enumerate(steps, start=1):
+            step_path = PIPELINE_DIR / step_file
+            if not step_path.exists():
+                LOGGER.error(f"Step file not found: {step_path}")
                 return 1
 
-        logger.info(f"[{index}/{len(steps)}] Running {step_file}")
-        result = subprocess.run([sys.executable, str(step_path)], cwd=str(PIPELINE_DIR))
-        if result.returncode != 0:
-            logger.error(f"Step failed with exit code {result.returncode}: {step_file}")
-            return result.returncode
+            # Reset subject progress for this step
+            progress.update(progress_task_id_subjects, completed=0, time_elapsed=0)
+            progress.update(progress_task_id, description=f"{index}/{len(steps)} {step_file}")
+            live.refresh()
 
-        logger.info(f"Completed {step_file}")
+            if not skip_preflight:
+                missing = preflight_check_for_step(step_file)
+                if missing:
+                    LOGGER.error(f"Stopping pipeline before {step_file} due to missing inputs.")
+                    return 1
 
-    logger.info("Pipeline completed successfully.")
+            LOGGER.info(f"[{index}/{len(steps)}] Running {step_file}")
+            proc = subprocess.Popen(
+                [sys.executable, str(step_path)],
+                cwd=str(PIPELINE_DIR),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                env=dict(os.environ, EEG_SUBPROCESS="1"),
+            )
+            while True:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                line = line.rstrip()
+                if line.startswith("PROGRESS:"):
+                    try:
+                        idx = int(line.split(":")[1])
+                        progress.update(progress_task_id_subjects, completed=idx)
+                    except ValueError:
+                        pass
+                else:
+                    LOGGER.info(line)
+            proc.wait()
+            if proc.returncode != 0:
+                LOGGER.error(f"Step failed with exit code {proc.returncode}: {step_file}")
+                return proc.returncode
+
+            # Ensure subject progress is complete
+            progress.update(progress_task_id_subjects, completed=len(config.SUBJECTS))
+
+            progress.advance(progress_task_id)
+            live.refresh()
+
+            LOGGER.info(f"Completed {step_file}")
+
+    LOGGER.info("Pipeline completed successfully.")
     return 0
 
 
@@ -169,14 +249,16 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+
+    mne.set_config("MNE_LOGGING_LEVEL", "ERROR")  # suppress verbose MNE info logs
+
     args = parse_args()
-    logger = setup_logger()
 
     steps = args.steps
 
     all_subjects = config.SUBJECTS
     if not all_subjects:
-        logger.error("No subjects found. Check BIDS_ROOT in preprocessing/config.py or set EEG_SUBJECTS env var.")
+        LOGGER.error("No subjects found. Check BIDS_ROOT in preprocessing/config.py or set EEG_SUBJECTS env var.")
         return 1
 
     if args.subjects:
@@ -190,11 +272,11 @@ def main() -> int:
     # Also update in-process config so preflight checks use the same set
     config.SUBJECTS = chosen
 
-    logger.info("Starting EEG pipeline runner")
-    logger.info(f"Subjects ({len(chosen)}): {config.SUBJECTS}")
-    logger.info(f"Steps: {steps}")
+    LOGGER.info("Starting EEG pipeline runner")
+    LOGGER.info(f"Subjects ({len(chosen)}): {config.SUBJECTS}")
+    LOGGER.info(f"Steps: {steps}")
 
-    return run_pipeline(steps, logger, skip_preflight=args.skip_preflight)
+    return run_pipeline(steps, skip_preflight=args.skip_preflight)
 
 
 if __name__ == "__main__":
