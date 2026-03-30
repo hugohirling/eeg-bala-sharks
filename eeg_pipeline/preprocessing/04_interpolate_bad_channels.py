@@ -9,6 +9,15 @@ PIPELINE_DIR = CURRENT_DIR.parent
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s"
+)
+
+LOGGER = logging.getLogger(__name__)
+
 from preprocessing import config
 from helper.general.helper_functions import get_step_io_files, save_current_step_file
 
@@ -42,7 +51,7 @@ def _get_bad_channels_for_subject(subject_id, person):
 
     table_path = Path(file_path)
     if not table_path.exists():
-        print(f"Bad-channels file not found: {table_path}. Skipping interpolation lists.")
+        LOGGER.warning(f"Bad-channels file not found: {table_path}. Skipping interpolation lists.")
         return []
 
     participants = _read_tsv_rows(table_path)
@@ -51,7 +60,7 @@ def _get_bad_channels_for_subject(subject_id, person):
 
     subject_label = f"sub-{subject_id}"
     if "participant_id" not in participants[0]:
-        print("Column 'participant_id' not found in bad-channels table. Skipping interpolation lists.")
+        LOGGER.warning("Column 'participant_id' not found in bad-channels table. Skipping interpolation lists.")
         return []
 
     row = next((entry for entry in participants if entry.get("participant_id") == subject_label), None)
@@ -85,7 +94,7 @@ def interpolate_bad_channels(subject_id):
         if path_in is None:
             raise ValueError("Interpolation step requires renamed+montaged input files")
 
-        print(f"Loading previous step file ({person}): {path_in}")
+        LOGGER.info(f"Loading previous step file ({person}): {path_in}")
         raw = mne.io.read_raw_fif(path_in, preload=True)
 
         bad_channels = _get_bad_channels_for_subject(subject_id, person)
@@ -96,9 +105,9 @@ def interpolate_bad_channels(subject_id):
         if bad_channels:
             raw.info["bads"] = bad_channels
             raw.interpolate_bads(reset_bads=True)
-            print(f"Interpolated bad channels for {subject_id} {person}: {', '.join(bad_channels)}")
+            LOGGER.info(f"Interpolated bad channels for {subject_id} {person}: {', '.join(bad_channels)}")
         else:
-            print(f"No bad channels configured for {subject_id} {person}.")
+            LOGGER.info(f"No bad channels configured for {subject_id} {person}.")
 
         out_path = save_current_step_file(
             raw,
@@ -107,12 +116,13 @@ def interpolate_bad_channels(subject_id):
             person=person,
             step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
         )
-        print(f"Saved interpolated file ({person}) to: {out_path}")
+        LOGGER.info(f"Saved interpolated file ({person}) to: {out_path}")
         outputs.append((person, out_path))
 
     return outputs
 
 
 if __name__ == "__main__":
-    for subj in config.SUBJECTS:
+    for i, subj in enumerate(config.SUBJECTS):
         interpolate_bad_channels(subj)
+        LOGGER.info(f"PROGRESS:{i + 1}")

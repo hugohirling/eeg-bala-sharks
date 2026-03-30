@@ -129,5 +129,6 @@ def split_players(subject_id):
 
 if __name__ == "__main__":
     # Process all subjects
-    for subj in config.SUBJECTS:
+    for i, subj in enumerate(config.SUBJECTS):
         split_players(subj)
+        LOGGER.info(f"PROGRESS:{i + 1}")

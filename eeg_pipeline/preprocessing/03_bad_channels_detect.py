@@ -9,6 +9,15 @@ PIPELINE_DIR = CURRENT_DIR.parent
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s"
+)
+
+LOGGER = logging.getLogger(__name__)
+
 from preprocessing import config
 from helper.general.helper_functions import get_step_io_files, save_current_step_file
 
@@ -47,7 +56,7 @@ def detect_bad_channels(subject_id):
         if path_in is None:
             raise ValueError("Bad-channel detection step requires rename+montage input files")
 
-        print(f"Loading previous step file ({person}): {path_in}")
+        LOGGER.info(f"Loading previous step file ({person}): {path_in}")
         raw = mne.io.read_raw_fif(path_in, preload=True)
 
         eeg_picks = mne.pick_types(raw.info, eeg=True, exclude=[])
@@ -78,11 +87,12 @@ def detect_bad_channels(subject_id):
         raw.info["bads"] = merged_bads
 
         report_path = _write_qc_report(subject_id, person, channel_names, std_values, z_scores, reasons)
-        print(f"Saved bad-channel QC report ({person}) to: {report_path}")
+        LOGGER.info(f"Saved bad-channel QC report ({person}) to: {report_path}")
         if suggested_bads:
-            print(f"Suggested bad channels for {subject_id} {person}: {', '.join(suggested_bads)}")
+            LOGGER.info(f"Suggested bad channels for {subject_id} {person}: {', '.join(suggested_bads)}")
         else:
-            print(f"No bad-channel suggestions for {subject_id} {person}.")
+
+            LOGGER.info(f"No bad-channel suggestions for {subject_id} {person}.")
 
         out_path = save_current_step_file(
             raw,
@@ -91,12 +101,13 @@ def detect_bad_channels(subject_id):
             person=person,
             step_output_suffixes=config.STEP_OUTPUT_SUFFIXES,
         )
-        print(f"Saved detection output ({person}) to: {out_path}")
+        LOGGER.info(f"Saved detection output ({person}) to: {out_path}")
         outputs.append((person, out_path, report_path, suggested_bads))
 
     return outputs
 
 
 if __name__ == "__main__":
-    for subj in config.SUBJECTS:
+    for i, subj in enumerate(config.SUBJECTS):
         detect_bad_channels(subj)
+        LOGGER.info(f"PROGRESS:{i + 1}")

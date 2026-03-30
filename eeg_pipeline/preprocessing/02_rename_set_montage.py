@@ -169,5 +169,6 @@ def rename_and_set_montage(subject_id):
 
 if __name__ == "__main__":
     # Process all subjects
-    for subj in config.SUBJECTS:
+    for i, subj in enumerate(config.SUBJECTS):
         rename_and_set_montage(subj)
+        LOGGER.info(f"PROGRESS:{i + 1}")
