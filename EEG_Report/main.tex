@@ -1,0 +1,456 @@
+%%%%%%%% ICML 2025 EXAMPLE LATEX SUBMISSION FILE %%%%%%%%%%%%%%%%%
+
+\documentclass{article}
+
+% Recommended, but optional, packages for figures and better typesetting:
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{subfigure}
+\usepackage{booktabs} % for professional tables
+
+% hyperref makes hyperlinks in the resulting PDF.
+% If your build breaks (sometimes temporarily if a hyperlink spans a page)
+% please comment out the following usepackage line and replace
+% \usepackage{icml2025} with \usepackage[nohyperref]{icml2025} above.
+\usepackage{hyperref}
+
+% Attempt to make hyperref and algorithmic work together better:
+\newcommand{\theHalgorithm}{\arabic{algorithm}}
+
+% Use the following line for the initial blind version submitted for review:
+% \usepackage{icml2025}
+
+% If accepted, instead use the following line for the camera-ready submission:
+\usepackage[accepted]{icml2025}
+
+% For theorems and such
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{amsthm}
+
+% if you use cleveref..
+\usepackage[capitalize,noabbrev]{cleveref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% THEOREMS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+% Todonotes is useful during development; simply uncomment the next line
+%    and comment out the line below the next line to turn off comments
+%\usepackage[disable,textsize=tiny]{todonotes}
+\usepackage[textsize=tiny]{todonotes}
+
+
+% The \icmltitle you define below is probably too long as a header.
+% Therefore, a short form for the running title is supplied here:
+\icmltitlerunning{EEG - Report - Bala Sharks}
+
+\begin{document}
+
+\twocolumn[
+\icmltitle{EEG - Report - Bala Sharks}
+
+% It is OKAY to include author information, even for blind
+% submissions: the style file will automatically remove it for you
+% unless you've provided the [accepted] option to the icml2025
+% package.
+
+% List of affiliations: The first argument should be a (short)
+% identifier you will use later to specify author affiliations
+% Academic affiliations should list Department, University, City, Region, Country
+% Industry affiliations should list Company, City, Region, Country
+
+% You can specify symbols, otherwise they are numbered in order.
+% Ideally, you should not use this facility. Affiliations will be numbered
+% in order of appearance and this is the preferred way.
+\icmlsetsymbol{equal}{*}
+
+\begin{icmlauthorlist}
+\icmlauthor{Bahar Kalyoncu}{}
+\icmlauthor{Ayush Batra}{}
+\icmlauthor{Hugo Hirling}{}
+
+%\icmlauthor{}{sch}
+
+%\icmlauthor{}{sch}
+%\icmlauthor{}{sch}
+\end{icmlauthorlist}
+
+
+
+
+% You may provide any keywords that you
+% find helpful for describing your paper; these are used to populate
+% the "keywords" metadata in the PDF but will not be shown in the document
+\icmlkeywords{EEG, Data Science}
+
+\vskip 0.3in
+]
+
+% this must go after the closing bracket ] following \twocolumn[ ...
+
+% This command actually creates the footnote in the first column
+% listing the affiliations and the copyright notice.
+% The command takes one argument, which is text to display at the start of the footnote.
+% The \icmlEqualContribution command is standard text for equal contribution.
+% Remove it (just {}) if you do not need this facility.
+
+%\printAffiliationsAndNotice{}  % leave blank if no need to mention equal contribution
+
+\begin{abstract}
+lorem ipsum
+\end{abstract}
+
+\section{Notes}
+Headsize different when we map to 1020.
+Player 1 and 2 are switched but also player 1 is player 2 for the next etc. (?)
+we had to downsample a lot as well, because of RAM issues on our hardware.
+
+Interesting finding: EOG channels in .tsv is 0, but in dataset there are EOG channels recorded -> we only have erg channels recorded which is sth different -> is this then a naming issue or is it a different recording?
+
+
+GSR – Galvanic Skin Response
+Measures skin conductance, which reflects autonomic nervous system activity (related to arousal, stress, or emotional responses).
+Not a direct brain signal, but often recorded alongside EEG to correlate physiological arousal with brain activity.
+ERG – Electroretinography
+Measures electrical responses of the retina to light stimuli.
+Primarily an ophthalmologic measure, not directly a brain signal, though it can be used in visual neuroscience studies.
+RES – Respiration
+Measures breathing rate or pattern.
+Not a brain signal; often used to control for physiological artifacts in EEG/fMRI studies.
+PLET – Plethysmography (often Pulse or Blood Volume Pulse)
+Measures blood volume changes, usually via a finger or earlobe sensor.
+Related to heart rate and cardiovascular responses, not a direct brain signal.
+TEMP – Temperature
+Measures skin or core body temperature.
+Again, not a brain signal, but useful for monitoring physiological state.
+
+
+Note from paper: "We collected continuous EEG data from 64 channels, digitised at a sampling rate of 2048 Hz,
+using the BioSemi Active-Two electrode system (BioSemi, Amsterdam, The Netherlands).
+Electrode placement followed the international 10-20 system (Oostenveld \& Praamstra, 2001)."
+
+
+preprocessing channels fixed -> what does this mean?
+
+The dataset is missing sub 10, 23 and 24.
+
+All datasets consist of channels 1-A1->1-A32, 1-B1->1-B32, 2-A1->A32, 2-B1->B32.
+
+Dataset ``sub-16'' additionally has Channels C1->C32 and D1->D32 for both person.
+\section{Introduction}
+lorem ipsum
+
+
+\section{Data Pipeline}
+
+\subsection{Data Set}
+The dataset ds006761 (version 1.0.0) published on OpenNeuro contains EEG recordings from a competitive decision‑making experiment. The study was designed to investigate neural correlates of human choices during repeated rounds of a computerized Rock‑Paper‑Scissors game. Participants played 480 trials of the game while their brain activity was recorded.
+
+A total of 31 participants were included in the dataset, contributing 129 EEG recording sessions. Data were acquired using a 64‑channel EEG setup at a sampling rate of 2048 Hz. The dataset is organized in BIDS (Brain Imaging Data Structure) format, enabling standardized access and compatibility with a wide range of neuroimaging analysis tools.
+
+The dataset is licensed under Creative Commons CC0, allowing unrestricted public use and reuse. A formal citation with DOI is provided to support reproducible research: Moerel et al. (2025), Neural decoding of competitive decision‑making in Rock‑Paper‑Scissors, doi:10.18112/openneuro.ds006761.v1.0.0.
+
+\subsection{Preprocessing}
+\label{sec:preprocessing}
+Our preprocessing pipeline looks as follows:
+\begin{enumerate}
+    \item Downsampling
+    \item Split by Player
+    \item Channel renaming and montage
+    \item Bad channel detection
+    \item Interpolation of bad channels
+    \item Bandpass filtering
+    \item ICA artifact removal
+    \item Epoching
+\end{enumerate}
+
+We decided to reduce the volume early on, then separate the two players, map the electrodes to a standard layout and only afterwards perform artifact correction and segmentation.
+
+\subsubsection{Downsampling}
+In the initial stage of the preprocessing pipeline, we resampled the raw EEG data to a lower sampling rate of 200 Hz. We implemented this early downsampling step to reduce data volume and memory demands while preserving the slow and mid-frequency EEG components relevant to our research objectives. As our subsequent analyses do not rely on high-frequency signal content, we consider a sampling rate of 200 Hz sufficient for further processing and decoding procedures.
+
+By applying downsampling at the beginning of the pipeline, we substantially improve computational efficiency. In particular, later steps such as independent component analysis (ICA) and epoching are both memory- and computation-intensive. Delaying data reduction would therefore lead to unnecessary increases in processing time and resource consumption.
+
+We defined the sampling rate for this step using the parameter DOWNSAMPLE$\_$SFREQ = 200.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-01_downsample_timeseries_comparison.png}
+    \caption{Downsampling (Sub-01-P1, A1): 2048Hz to 200Hz}
+    \label{fig:downsampling}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-01_downsample_statistics_comparison.png}
+    \caption{Downsampling (Sub-01-P1, A1): Statistical Comparison}
+    \label{fig:downsampling}
+\end{figure}
+
+\subsubsection{Split by Player}
+After downsampling, we separated the data into two individual datasets, as each recording contains the signals of both players simultaneously. For each dyad, this results in one dataset for Player 1 and one dataset for Player 2. This separation allows us to carry out all subsequent preprocessing steps on a subject-specific basis. In addition to the EEG channels, we retained relevant auxiliary channels, such as the status channel used for event detection.
+
+We performed this step to ensure that preprocessing procedures such as bad channel detection, independent component analysis (ICA), and epoching operate on consistent single-subject data. Keeping both players’ data combined would lead to ambiguities in channel names, channel types, and artifact models, making the results difficult to interpret.
+
+An important implementation detail concerns the channel prefixes in the original data. These prefixes are inverted relative to the behavioral data, which is why we explicitly map Player 1 to the prefix “2-” and Player 2 to “1-”. Documenting this mapping is essential to ensure that player labels are correctly aligned with the corresponding EEG data.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-01_split_players_validation.png}
+    \caption{Splitting Data Validation}
+    \label{fig:splitting}
+\end{figure}
+
+\subsubsection{Channel renaming and montage}
+After separating the data for the two players, we converted the EEG channels from the original BioSemi-64 naming scheme to standardized 10-20 system labels. For 3D mapping, we use the electrode locations provided in the original dataset. Since these positions are defined on a normalized unit sphere (radius = 1), we rescaled them to realistic head coordinates in meters (radius = 0.1), as required for accurate 3D representation. Channels with the prefixes “C” or “D” are removed, as these are used by subject 16 and are not part of the standard montage. The remaining 64 EEG channels are then mapped to standard names such as Fp1, Cz, or O2 and assigned spatial positions according to the BioSemi-64 template. This ensures that electrodes have both meaningful names and accurate spatial coordinates, which are necessary for topographic visualizations and for interpolating defective channels.
+
+We perform this step at this stage because bad-channel detection and interpolation are much more effective when channels are correctly labeled and spatially positioned. Additionally, this step establishes a clean foundation for subsequent visualizations and data interpretation.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-01_P1_montage_topomap.png}
+    \caption{Sub-01-P1, Topomap 10-20 System}
+    \label{fig:rename & montage}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-01_P1_montage_3d.png}
+    \caption{Sub-01-P1, 3D Channel Mapping}
+    \label{fig:rename & montage}
+\end{figure}
+
+\subsubsection{Bad channel detection}
+In this step, we identify EEG channels with poor signal quality that are unlikely to provide reliable data. These channels are marked as bad channels so that they can be specifically interpolated in the subsequent step.
+
+For each EEG channel, the standard deviation (STD) over time is calculated, where a very high STD indicates a strongly fluctuating signal and a very low STD indicates an almost flat signal. From all channel STDs, a robust Z-score is computed using the median and median absolute deviation (MAD), which provides resilience against outliers compared to classical Z-scores. Channels are automatically flagged as bad based on two rules: the flat-channel rule (STD $\leq$ 1e-12) and the outlier rule ($|$robust Z-score$|$ $\ge$ 4.0). In addition, any manually specified bad channels from participants.tsv are incorporated. The final bad-channel list is saved as the union of automatically detected and manually annotated channels.
+
+The updated EEG file (.fif) includes the bad-channel markings in the metadata field bads, and a QC report is generated for each participant in TSV format. This report contains columns such as channel, std, robust$\_$z, suggested (yes/no), and reason (e.g., flat, outlier$\_$std, manual$\_$tsv), providing transparency on whether a channel was flagged automatically or based on the original annotations.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_bad_channels_qc_std.png}
+    \caption{Sub-04-P2, Bad Channel Metrics (std)}
+    \label{fig:bad channel metrics}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_bad_channels_qc_zscore.png}
+    \caption{Sub-04-P2, Bad Channel Metrics (z-score)}
+    \label{fig:bad channel metrics}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_bad_channels_topomap.png}
+    \caption{Sub-04-P2, Bad Channel Topoplot}
+    \label{fig:bad channel topoplot}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_bad_channels_all_channels_timeseries_neighbors.png}
+    \caption{Sub-04-P2, Bad Channels and Neighbors}
+    \label{fig:bad channel and neigbors}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_bad_channels_all_channels_timeseries_overview.png}
+    \caption{Sub-04-P2, Bad Channel Overview}
+    \label{fig:bad channel overview}
+\end{figure}
+
+\subsubsection{Interpolation of bad channels}
+
+The bad channels identified in the process before are not removed but are replaced through spatial interpolation. The signal of each faulty channel is estimated based on its neighboring electrodes and their known positions on the scalp. The goal of this procedure is to maintain the spatial completeness of the EEG data without propagating poor-quality signals into subsequent analyses. In our implementation, no additional thresholds or neighborhood parameters are manually set; the interpolation is performed directly using the previously marked bad channels and the electrode montage defined in step 2.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_interpolate_bad_channel_restoration.png}
+    \caption{Sub-04-P2, Interpolation Summary}
+    \label{fig:interpolation summary}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_interpolate_timeseries.png}
+    \caption{Sub-04-P2, Interpolation Timeseries}
+    \label{fig:interpolation timeseries}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_interpolate_vs_bad_channels_neighbors.png}
+    \caption{Sub-04-P2, Interpolation vs. Neighbors}
+    \label{fig:interpolation vs. neighbors}
+\end{figure}
+
+\subsubsection{Bandpass filtering}
+For further cleaning of the data, we apply a bandpass filter to each participant’s EEG file (P1 and P2) to retain only the frequency components relevant for cognitive analysis. The filter allows signals within a defined range to pass while attenuating frequencies outside this range. In our pipeline, this range is defined by the configuration values freq$\_$lower = 1.0 Hz and freq$\_$upper = 40.0 Hz, which remove slow drifts below 1 Hz and high-frequency noise above 40 Hz. The upper limit of 40 Hz is chosen because most cognitive EEG activity of interest occurs below this threshold, while higher frequencies are often dominated by muscle artifacts and environmental noise, making them less informative for the analyses.
+
+The bandpass filter is applied directly to the interpolated EEG data from the step before. By restricting the signal to the 1–40 Hz range, we stabilize the EEG, focus on the relevant frequency components, and reduce contributions from slow drifts and high-frequency noise. This improves the reliability of subsequent processing steps, such as ICA-based artifact removal, and enhances the overall quality and interpretability of the data.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_filter_bandpower_summary.png}
+    \caption{Sub-04-P2, Filtering Summary}
+    \label{fig:filtering summary}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_filter_psd_comparison.png}
+    \caption{Sub-04-P2, Filtering PSD Comparison}
+    \label{fig:filtering psd comparison}
+\end{figure}
+
+\subsubsection{ICA artifact removal}
+
+The ICA stage of our EEG preprocessing pipeline is applied separately for each participant and session to remove artifact-related components. ICA fitting is performed on a filtered copy of the data using a high-pass filter at 1.0 Hz, which improves component stability and reduces slow drifts. The number of components is set to the minimum of 20 or the number of remaining good EEG channels, ensuring sufficient decomposition while maintaining computational efficiency. We use FastICA due to its robustness and widespread use in EEG preprocessing, with a maximum of 500 iterations to ensure convergence even for more complex data.
+
+The initial artifact removal approach relied on EOG-based detection using ica.find$\_$bads$\_$eog(), which identifies components correlated with ocular activity. However, the dataset does not contain dedicated EOG channels. Instead, ERG channels (Erg1/Erg2) are present but labeled as bio signals and primarily reflect retinal responses to light rather than eye movements or blinks. As a result, they are not suitable for reliable EOG-based artifact detection and are therefore excluded from the ICA-based cleaning procedure. While these channels remain available for exploratory analyses, they are not used for automated artifact correction.
+
+To overcome this limitation, we replaced the EOG-based approach with ICLabel, a neural network–based classification method that operates independently of specific artifact channels. After ICA decomposition, each component is automatically classified based on its spatial characteristics into categories such as brain activity, eye-related artifacts, muscle activity, cardiac signals, line noise, and channel noise. Components with a classification probability greater than 0.70 for non-brain classes are marked as artifacts. In our configuration, we remove components associated with eye activity, muscle artifacts, heartbeats, line noise, and channel noise.
+
+The identified components are then excluded from the signal, resulting in a cleaned EEG dataset. This approach enables fully automated and reproducible artifact removal, captures a broad range of artifact sources, and avoids the limitations of channel-dependent methods. Additionally, each exclusion decision remains transparent, as it is associated with both a predicted class and its corresponding probability, ensuring traceability and interpretability of the cleaning process.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_ica_variance.png}
+    \caption{Sub-04-P2, ICA Variance}
+    \label{fig:ica variance}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_ica_components.png}
+    \caption{Sub-04-P2, ICA Components}
+    \label{fig:ica components}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_ica_bad_timeseries.png}
+    \caption{Sub-04-P2, ICA Timeseries}
+    \label{fig:ica time series}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_ica_psd_comparison.png}
+    \caption{Sub-04-P2, ICA PSD Comparison}
+    \label{fig:ica psd comparison}
+\end{figure}
+
+\subsubsection{Epoching}
+
+The epoching step segments the continuous ICA-cleaned EEG data into time-locked trials for each participant and per-person session (P1 and P2). For each subject, both persons are processed sequentially. The segmentation is based on events extracted primarily from annotations, with a fallback to the status channel if annotations are missing. If no valid events are found, the pipeline raises an error to ensure data integrity.
+
+Epochs are created using MNE by segmenting the continuous signal around each event, with a time window from -0.2 s to 5.0 s and baseline correction applied over the pre-stimulus interval (-0.2 to 0.0 s). These parameters are chosen to match the temporal structure of the experimental paradigm: each trial in the dataset consists of three sequential phases—decision (2 s), response (2 s), and feedback (1 s). By defining epochs that span the entire trial, all relevant cognitive and motor processes are captured in a single epoch, while the pre-stimulus baseline corrects for slow drifts prior to trial onset. Additionally, epochs overlapping with annotated bad segments are automatically rejected (reject$\_$by$\_$annotation=True) to maintain data quality.
+
+Although a maximum number of epochs (MAX$\_$EPOCHS = 500) is defined in the configuration, it is currently not applied, and all detected epochs are retained. The resulting epochs are saved as separate files for P1 and P2 per subject, ensuring that each epoch reflects a complete trial in the experiment and is suitable for downstream analyses.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_epoch_examples.png}
+    \caption{Sub-04-P2, Epoch Examples}
+    \label{fig:epoch examples}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Images/sub-04_P2_epoch_psd_comparison.png}
+    \caption{Sub-04-P2, Epoch PSD Comparison}
+    \label{fig:epoch psd comparison}
+\end{figure}
+
+\subsection{Implementation}
+
+The EEG preprocessing pipeline is implemented in Python, leveraging the MNE~\cite{MNE} and MNE-BIDS~\cite{MNEBIDS} libraries for robust handling of electrophysiological data and BIDS-formatted datasets. This implementation ensures reproducibility, modularity, and ease of maintenance, adhering to best practices in neuroimaging data processing.
+
+\subsubsection{Modular Architecture}
+
+Each preprocessing step outlined in Section~\ref{sec:preprocessing} is encapsulated in a dedicated Python file within the \texttt{eeg\_pipeline/preprocessing/} directory. This modular design facilitates independent execution of individual steps, which is essential for iterative development, debugging, and sanity checks. By isolating each step, researchers can verify the functionality of specific operations without rerunning the entire pipeline, thereby enhancing efficiency and reducing computational overhead during development and validation phases.
+
+The pipeline's configuration is centralized in \texttt{config.py}, which defines key parameters such as subject identifiers, pipeline step sequences, channel mappings, and output suffixes. This approach promotes consistency across steps and simplifies parameter tuning. Environment-specific settings, including paths to data directories and external resources, are managed through \texttt{paths.py}, ensuring portability across different computing environments. Additionally, \texttt{environment.yaml} specifies the required Python dependencies, enabling reproducible installations via Conda environments.
+
+\subsubsection{Data Handling and Intermediate Results}
+
+Data loading and saving are handled through standardized helper functions in \texttt{helper/general/helper\_functions.py}, which abstract file I/O operations and ensure consistent naming conventions. Input data is loaded from BIDS-formatted files using MNE-BIDS, while intermediate results are saved in FIF format - a native MNE format that preserves metadata and supports efficient reloading. This design allows for seamless resumption of processing at any step, minimizing redundant computations and enabling parallel processing of subjects where feasible.
+
+The \texttt{master\_pipeline.py} script serves as the central coordinator, orchestrating the sequential execution of all preprocessing steps across all subjects. It incorporates preflight checks to validate input file availability and error handling to prevent pipeline failures. Subprocess execution of individual steps ensures isolation, allowing for concurrent processing and detailed logging of each operation. This architecture supports both interactive subject selection and automated batch processing, making the pipeline adaptable to various research workflows.
+
+\subsection{Encoding/Decoding}
+
+To facilitate subsequent analysis, the epochs derived from the preprocessing pipeline are segmented into distinct temporal phases corresponding to key experimental events: the decision phase (0.0s to 2.0s), the response phase (2.0s to 4.0s), and the feedback phase (4.0s to 5.0s). These phases capture the neural dynamics associated with decision formation, motor response execution, and outcome evaluation, respectively.
+
+Furthermore, the epochs are categorized based on the participant's choices, resulting in three distinct classes: "rock", "paper", and "scissors". This classification enables the decoding of the participant's decision from the EEG data within each phase. Decoding in this context refers to the application of machine learning algorithms to predict the categorical outcome (i.e., the chosen action) from the multivariate EEG time series.
+
+To quantify the efficacy of the decoding algorithm, the accuracy metric is employed, defined as the proportion of correctly predicted decisions relative to the total number of trials. When the algorithm fails to extract predictive information from the EEG data, the accuracy converges to the chance level of approximately 0.33, reflecting random guessing among the three equiprobable outcomes. Values significantly above this threshold indicate successful decoding, potentially revealing phase-specific neural signatures of decision processes.
+
+\section{Analysis}
+\subsection{Method 1: Interbrain Synchrony} 
+\subsection{Definition and Methodological Approach}
+Interbrain synchrony refers to the temporal coupling of neural activity between two individuals during social interaction. In such studies, the brain activity of both participants is recorded simultaneously, for example using EEG in so-called hyperscanning paradigms. The aim is to assess whether the signals from both brains exhibit similar temporal dynamics, such as aligned phases or rhythms, within specific frequency bands (e.g., theta, alpha, or beta). When this coupling exceeds what would be expected by chance, it is described as interbrain synchrony.
+
+Conceptually, increased synchrony is often associated with processes such as shared attention, coordinated action, mutual prediction, or other forms of social alignment. Conversely, low synchrony should not be interpreted as inherently negative; rather, it indicates a lower degree of temporal coupling between the individuals’ neural signals at a given moment. The analysis of interbrain synchrony typically focuses on specific EEG frequency bands that are linked to different cognitive functions. Theta activity (approximately 4–7 Hz) is commonly associated with memory processes, learning, cognitive control, and increased mental effort; in social contexts, it may also reflect shared attention or interpersonal coordination. Alpha activity (approximately 8–12 Hz) is often related to attention and inhibitory processes, with decreases in alpha power (desynchronization) typically interpreted as an index of active information processing or heightened attentional engagement. Beta activity (approximately 13–30 Hz) is frequently linked to active information processing, motor functions, and goal-directed behavior.
+
+Several analytical approaches are commonly used to quantify interbrain synchrony. These include the Phase Locking Value (PLV), which measures the consistency of phase differences between signals, and coherence, which captures the extent to which signals oscillate together within a given frequency band. In addition, correlation and cross-correlation methods are used to examine temporal relationships between the activity patterns of the two brains.
+
+An important methodological consideration is that observed synchrony may not solely reflect genuine social interaction. It can also arise from shared external inputs, for instance when both participants are exposed to the same sensory stimuli. Therefore, appropriate control analyses are essential. These often involve shuffle or surrogate procedures, such as randomly pairing participants or introducing temporal shifts in the data, to test whether the observed synchrony exceeds what would be expected from chance or common stimulus-driven effects.
+
+\subsection{Implementation}
+
+\subsection{Results and Interpretation}
+
+\subsection{Method 2} 
+
+
+
+\subsection{Results} 
+\subsubsection{Set-up}
+
+\subsubsection{Interpretation}
+
+\subsubsection{Differences}
+
+\subsubsection{Comparison and Discussion}
+
+
+\section{Recommendation} 
+
+
+\section{Future Work} 
+
+
+\section{Self-Reflection} 
+
+
+% In the unusual situation where you want a paper to appear in the
+% references without citing it in the main text, use \nocite
+%\nocite{langley00}
+
+\bibliography{bib}
+\bibliographystyle{plain}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\end{document}

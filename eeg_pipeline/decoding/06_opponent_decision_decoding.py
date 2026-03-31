@@ -89,6 +89,7 @@ def process_cross_decoding(subject_id: str):
     picks = mne.pick_types(epochs_p1.info, eeg=True, stim=False, misc=False)
     
     # X = The independent variable (Features). This is strictly Player 1's 64-channel brain activity.
+    # We forcefully slice the array to strictly ensure only physical head electrodes are used.
     X = epochs_p1.get_data(picks=picks)[:, :64, :] 
     
     # Let's inspect MNE's default event array
@@ -110,6 +111,7 @@ def process_cross_decoding(subject_id: str):
             return
             
         df = pd.read_csv(tsv_files[0], sep='\t')
+        print(f"[{subject_id}] Loaded TSV! Columns found: {df.columns.tolist()}")
         
         # Identify the correct column representing Player 2's actual action (Rock, Paper, Scissors)
         target_col = None
@@ -124,6 +126,8 @@ def process_cross_decoding(subject_id: str):
             
         # Extract and logically map string/numerical choices to standard ML classes (0, 1, 2)
         raw_text_labels = df[target_col].dropna().values
+        print(f"[{subject_id}] First 5 raw choices found: {raw_text_labels[:5]}")
+        
         valid_choices = np.unique(raw_text_labels)
         label_map = {val: i for i, val in enumerate(valid_choices)}
         y_opponent = df[target_col].map(label_map).fillna(0).values
@@ -136,7 +140,7 @@ def process_cross_decoding(subject_id: str):
         y_opponent = raw_labels
 
     print(f"[{subject_id}] Training matrix shape: {X.shape} (Trials, Channels, Timepoints)")
-    print(f"[{subject_id}] Unique choices in opponent's array: {np.unique(y_opponent, return_counts=True)}")
+    print(f"[{subject_id}] Unique choices in y array: {np.unique(y_opponent, return_counts=True)}")
     # ---------------------------------------------------
     
     # ----------------- MACHINE LEARNING -----------------
@@ -150,7 +154,7 @@ def process_cross_decoding(subject_id: str):
     print(f"[{subject_id}] Training ML model: Can P1 predict P2's turn? (this takes a moment)...")
     # 5-Fold Stratified Cross Validation
     scores = cross_val_multiscore(time_decode, X, y_opponent, cv=5, n_jobs=1)
-    mean_scores = np.mean(scores, axis=0)
+    mean_scores = np.mean(scores, axis=0) # Average across folds
     
     # Save mathematical results for eventual group-level Grand Averaging
     out_npy = output_dir / f"sub-{subject_id}_P1_predicting_P2.npy"
@@ -162,21 +166,23 @@ def process_cross_decoding(subject_id: str):
     # Plot the fluctuating accuracy over time
     ax.plot(epochs_p1.times, mean_scores, label="Predicting P2's Move", color="#e74c3c", linewidth=2)
     
-    # Formulate baseline chance level. For a 3-choice game (Rock/Paper/Scissors), chance is 33.3%
+    # Formulate baseline chance level. For a 3-choice game (Rock/Paper/Scissors), chance is ~33.3%
     chance_level = 1.0 / len(np.unique(y_opponent))
     ax.axhline(chance_level, color='k', linestyle='--', label=f"Chance Level ({chance_level*100:.0f}%)")
     ax.axvline(0, color='k', linestyle='-', alpha=0.5)
     
-    # Highlight the expected temporal phase where predictive simulation should peak
-    ax.axvspan(0, 2.0, color='gray', alpha=0.1, label="Decision/Simulation Phase")
+    # Highlight the expected temporal phase where predictive simulation should theoretically peak
+    ax.axvspan(0, 2.0, color='gray', alpha=0.1, label="Decision Phase")
     
     ax.set_title(f"Cross-Brain Decoding: Player 1 Predicting Player 2 (sub-{subject_id})")
     ax.set_xlabel("Time (s) relative to stimulus")
     ax.set_ylabel("Decoding Accuracy")
     ax.legend(loc="upper right")
     
+    # Print dynamic scaling bounds to the console for verification
     print(f"[{subject_id}] Accuracy -> Min: {mean_scores.min():.3f}, Mean: {mean_scores.mean():.3f}, Max: {mean_scores.max():.3f}")
 
+    # Save output plot
     out_png = output_dir / f"sub-{subject_id}_P1_predicting_P2.png"
     plt.tight_layout()
     plt.savefig(out_png, dpi=300)
