@@ -1,3 +1,4 @@
+# Comments in this file were added with the help of GitHub Copilot (GPT-5.3-Codex).
 from __future__ import annotations
 
 import argparse
@@ -9,6 +10,9 @@ import matplotlib.pyplot as plt
 import mne
 import numpy as np
 import pandas as pd
+from rich.console import Console
+from rich.live import Live
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.pipeline import Pipeline
@@ -21,11 +25,38 @@ if str(PIPELINE_DIR) not in sys.path:
 
 from preprocessing import config
 
+console = Console()
+progress = Progress(
+    TextColumn("[progress.description]{task.description}"),
+    BarColumn(),
+    MofNCompleteColumn(),
+    TextColumn("•"),
+    TimeElapsedColumn(),
+    TextColumn("•"),
+    TimeRemainingColumn(),
+    console=console,
+    transient=False,
+    refresh_per_second=10,
+)
+
 RESP_CODE_TO_NAME = {1: "rock", 2: "paper", 3: "scissors"}
 
 
 def _balanced_accuracy_from_predictions(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """Macro-averaged recall over rock/paper/scissors (class-balanced accuracy)."""
+    """
+    Computes class-balanced accuracy from predicted and true RPS labels.
+
+    Balanced accuracy is implemented as macro-average recall over the three
+    classes (rock, paper, scissors), which is more robust than plain accuracy
+    under class imbalance.
+
+    Args:
+        y_true (np.ndarray): Ground-truth class codes.
+        y_pred (np.ndarray): Predicted class codes.
+
+    Returns:
+        float: Macro-averaged recall across available classes.
+    """
     recalls: list[float] = []
     for cls in [1, 2, 3]:
         mask = y_true == cls
@@ -35,12 +66,30 @@ def _balanced_accuracy_from_predictions(y_true: np.ndarray, y_pred: np.ndarray) 
 
 
 def _resolve_subjects(subjects_arg: str | None) -> list[str]:
+    """
+    Resolves the CLI subject argument into a normalized list of IDs.
+
+    Args:
+        subjects_arg (str | None): Comma-separated subject IDs or None.
+
+    Returns:
+        list[str]: Subject IDs to process.
+    """
     if subjects_arg:
         return [part.strip() for part in subjects_arg.split(",") if part.strip()]
     return list(config.SUBJECTS)
 
 
 def _get_events_tsv_path(subject_id: str) -> Path:
+    """
+    Builds the expected BIDS events TSV path for one subject.
+
+    Args:
+        subject_id (str): Subject identifier without sub- prefix.
+
+    Returns:
+        Path: Path to the events TSV file.
+    """
     return (
         Path(config.BIDS_ROOT)
         / f"sub-{subject_id}"
@@ -50,10 +99,32 @@ def _get_events_tsv_path(subject_id: str) -> Path:
 
 
 def _get_epoch_path(subject_id: str, person: str) -> Path:
+    """
+    Builds the expected epoch-file path for one subject/player.
+
+    Args:
+        subject_id (str): Subject identifier without sub- prefix.
+        person (str): Player label, typically P1 or P2.
+
+    Returns:
+        Path: Path to the preprocessed epoch FIF file.
+    """
     return Path(config.OUTPUT_DIR) / f"sub-{subject_id}_{person}_epoch.fif"
 
 
 def _player_response_column(person: str) -> str:
+    """
+    Maps a person label to the corresponding response column in events TSV.
+
+    Args:
+        person (str): Player label, typically P1 or P2.
+
+    Returns:
+        str: Response column name in the events table.
+
+    Raises:
+        ValueError: If the configured player prefix is invalid.
+    """
     prefix = config.PLAYER_PREFIX_MAP[person]
     if prefix.startswith("1"):
         return "player1_resp"
@@ -63,6 +134,20 @@ def _player_response_column(person: str) -> str:
 
 
 def _load_labels(subject_id: str, person: str) -> np.ndarray:
+    """
+    Loads decision labels for a subject/player from the events TSV.
+
+    Args:
+        subject_id (str): Subject identifier without sub- prefix.
+        person (str): Player label, typically P1 or P2.
+
+    Returns:
+        np.ndarray: Integer decision labels.
+
+    Raises:
+        FileNotFoundError: If the events TSV does not exist.
+        ValueError: If the expected response column is missing.
+    """
     events_path = _get_events_tsv_path(subject_id)
     if not events_path.exists():
         raise FileNotFoundError(f"Missing events file: {events_path}")
@@ -76,17 +161,42 @@ def _load_labels(subject_id: str, person: str) -> np.ndarray:
 
 
 def _load_decision_features(subject_id: str, person: str) -> np.ndarray:
+    """
+    Loads EEG features for the decision phase (0-2 s) for one subject/player.
+
+    Args:
+        subject_id (str): Subject identifier without sub- prefix.
+        person (str): Player label, typically P1 or P2.
+
+    Returns:
+        np.ndarray: EEG tensor with shape (trials, channels, times).
+
+    Raises:
+        FileNotFoundError: If the epoch file is missing.
+    """
     epoch_path = _get_epoch_path(subject_id, person)
     if not epoch_path.exists():
         raise FileNotFoundError(f"Missing epoch file: {epoch_path}")
 
-    epochs = mne.read_epochs(str(epoch_path), preload=True, verbose=False)
+    epochs = mne.read_epochs(str(epoch_path), preload=True)
     decision_epochs = epochs.copy().crop(tmin=0.0, tmax=2.0)
     decision_epochs.pick("eeg")
     return decision_epochs.get_data(copy=True)
 
 
 def _get_decision_time_bins(n_bins: int = 8) -> tuple[list[float], list[float], list[float]]:
+    """
+    Returns fixed 250 ms bins for the 0-2 s decision interval.
+
+    Args:
+        n_bins (int): Number of bins to generate (default 8).
+
+    Returns:
+        tuple[list[float], list[float], list[float]]:
+            - Bin starts in seconds.
+            - Bin ends in seconds.
+            - Bin centers in seconds.
+    """
     starts = [0.25 * i for i in range(n_bins)]
     ends = [start + 0.25 for start in starts]
     centers = [(start + end) / 2.0 for start, end in zip(starts, ends)]
@@ -101,7 +211,24 @@ def _decode_timecourse_by_bin(
     actual_splits: int,
     random_state: int,
 ) -> pd.DataFrame:
-    """Compute bin-wise decoding accuracy overall and per decision class."""
+    """
+    Computes bin-wise decoding performance over the decision interval.
+
+    For each 250 ms bin, the model predicts unseen trials via cross-validated
+    out-of-fold probabilities and derives overall, balanced, and class-specific
+    accuracies.
+
+    Args:
+        X_full (np.ndarray): Decision-phase EEG tensor (trials, channels, times).
+        y (np.ndarray): Trial labels.
+        subject_id (str): Subject identifier.
+        person (str): Player label, typically P1 or P2.
+        actual_splits (int): Feasible number of CV folds.
+        random_state (int): Random seed for fold shuffling.
+
+    Returns:
+        pd.DataFrame: Bin-wise accuracy metrics for one subject/player.
+    """
     n_times = X_full.shape[2]
     n_bins = 8
     bin_edges = np.linspace(0, n_times, n_bins + 1, dtype=int)
@@ -126,6 +253,7 @@ def _decode_timecourse_by_bin(
     for i in range(n_bins):
         start_idx = bin_edges[i]
         end_idx = bin_edges[i + 1]
+        # Use bin-averaged channel features to keep temporal structure compact.
         X_bin = X_full[:, :, start_idx:end_idx].mean(axis=2)
 
         proba_bin = cross_val_predict(clf, X_bin, y, cv=cv, method="predict_proba", n_jobs=1)
@@ -172,9 +300,26 @@ def _decode_probabilities_for_subject_person(
     random_state: int,
 ) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
     """
-    EEG-based probability decoder.
+    Runs decision-phase EEG probability decoding for one subject/player pair.
 
-    Uses out-of-fold predict_proba so probabilities are computed on unseen trials.
+    Uses out-of-fold predict_proba so each trial is evaluated by a model that
+    did not see that trial during fitting.
+
+    Args:
+        subject_id (str): Subject identifier.
+        person (str): Player label, typically P1 or P2.
+        n_splits (int): Maximum number of CV folds.
+        random_state (int): Random seed.
+
+    Returns:
+        tuple[pd.DataFrame, dict, pd.DataFrame]:
+            - Per-trial probabilities and predictions.
+            - Subject/player summary dictionary.
+            - Bin-wise timecourse accuracy dataframe.
+
+    Raises:
+        ValueError: If trial count/classes are insufficient for decoding.
+        RuntimeError: If probability output shape is unexpected.
     """
     X_full = _load_decision_features(subject_id, person)
     y_full = _load_labels(subject_id, person)
@@ -293,32 +438,64 @@ def run_eeg_probability_analysis(
     n_splits: int,
     random_state: int,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict, pd.DataFrame, pd.DataFrame]:
+    """
+    Executes EEG probability decoding across all requested subjects and players.
+
+    The function aggregates per-trial outputs, per-subject summaries, and
+    timecourse metrics, and computes group-level summary statistics.
+
+    Args:
+        subjects (list[str]): Subject IDs to process.
+        n_splits (int): Maximum number of CV folds.
+        random_state (int): Random seed.
+
+    Returns:
+        tuple[pd.DataFrame, pd.DataFrame, dict, pd.DataFrame, pd.DataFrame]:
+            - trials_df: All per-trial probability rows.
+            - summary_df: Per subject/player summary table.
+            - group_summary: Group-level summary metrics.
+            - timecourse_df: Per subject/player bin-wise accuracies.
+            - group_timecourse_df: Group-mean bin-wise accuracies.
+
+    Raises:
+        RuntimeError: If no valid subject/player result is produced.
+    """
     all_trial_rows: list[pd.DataFrame] = []
     all_summary_rows: list[dict] = []
     all_timecourse_rows: list[pd.DataFrame] = []
 
-    for subject_id in subjects:
-        for person in ["P1", "P2"]:
-            try:
-                trial_df, summary, timecourse_df = _decode_probabilities_for_subject_person(
-                    subject_id=subject_id,
-                    person=person,
-                    n_splits=n_splits,
-                    random_state=random_state,
-                )
-                all_trial_rows.append(trial_df)
-                all_summary_rows.append(summary)
-                all_timecourse_rows.append(timecourse_df)
-                print(
-                    f"sub-{subject_id} {person}: "
-                    f"acc={summary['accuracy']:.3f}, "
-                    f"bal_acc={summary['balanced_accuracy']:.3f}, "
-                    f"mean probs (R/P/S)=({summary['mean_p_rock_eeg']:.3f}, "
-                    f"{summary['mean_p_paper_eeg']:.3f}, {summary['mean_p_scissors_eeg']:.3f}), "
-                    f"n={summary['n_trials_used']}"
-                )
-            except Exception as exc:
-                print(f"sub-{subject_id} {person}: skipped ({exc})")
+    with Live(progress, console=console, refresh_per_second=1) as live:
+        total_items = len(subjects) * 2
+        task_id = progress.add_task("EEG probability decoding", total=total_items)
+
+        for subject_id in subjects:
+            for person in ["P1", "P2"]:
+                try:
+                    progress.update(task_id, description=f"sub-{subject_id} {person}")
+                    live.refresh()
+
+                    trial_df, summary, timecourse_df = _decode_probabilities_for_subject_person(
+                        subject_id=subject_id,
+                        person=person,
+                        n_splits=n_splits,
+                        random_state=random_state,
+                    )
+                    all_trial_rows.append(trial_df)
+                    all_summary_rows.append(summary)
+                    all_timecourse_rows.append(timecourse_df)
+                    console.print(
+                        f"[green]✓[/green] sub-{subject_id} {person}: "
+                        f"acc={summary['accuracy']:.3f}, "
+                        f"bal_acc={summary['balanced_accuracy']:.3f}, "
+                        f"mean probs (R/P/S)=({summary['mean_p_rock_eeg']:.3f}, "
+                        f"{summary['mean_p_paper_eeg']:.3f}, {summary['mean_p_scissors_eeg']:.3f}), "
+                        f"n={summary['n_trials_used']}"
+                    )
+                except Exception as exc:
+                    console.print(f"[yellow]⚠[/yellow] sub-{subject_id} {person}: skipped ({exc})")
+
+                progress.advance(task_id)
+                live.refresh()
 
     if not all_trial_rows:
         raise RuntimeError("No valid subject/person results were produced.")
@@ -358,7 +535,19 @@ def run_eeg_probability_analysis(
 
 
 def _save_timecourse_accuracy_plot(group_timecourse_df: pd.DataFrame, out_dir: Path) -> Path:
-    """Plot accuracy over time for each decision class plus overall."""
+    """
+    Saves group-level decision-phase timecourse accuracy plot.
+
+    The figure includes overall and balanced accuracy, plus per-class accuracy
+    curves and the theoretical chance line.
+
+    Args:
+        group_timecourse_df (pd.DataFrame): Group-mean bin-wise metrics.
+        out_dir (Path): Output directory.
+
+    Returns:
+        Path: Path to the saved PNG file.
+    """
     x = group_timecourse_df["bin_center_s"].to_numpy(dtype=float)
     overall = group_timecourse_df["accuracy_overall"].to_numpy(dtype=float)
     balanced = group_timecourse_df["accuracy_balanced"].to_numpy(dtype=float)
@@ -404,6 +593,14 @@ def _save_timecourse_accuracy_plot(group_timecourse_df: pd.DataFrame, out_dir: P
 
 
 def main() -> None:
+    """
+    CLI entry point for EEG probability decoding and reporting.
+
+    Returns:
+        None
+    """
+    mne.set_config("MNE_LOGGING_LEVEL", "ERROR")
+
     parser = argparse.ArgumentParser(
         description=(
             "Estimate Rock/Paper/Scissors probabilities from EEG (decision phase), "
@@ -438,30 +635,30 @@ def main() -> None:
     group_path.write_text(json.dumps(group_summary, indent=2), encoding="utf-8")
     plot_path = _save_timecourse_accuracy_plot(group_timecourse_df=group_timecourse_df, out_dir=out_dir)
 
-    print("\n=== EEG Probability Summary ===")
-    print(f"N subject/person: {group_summary['n_subject_person']}")
-    print(f"Total trials: {group_summary['n_trials_total']}")
-    print(
+    console.print("\n=== EEG Probability Summary ===")
+    console.print(f"N subject/person: {group_summary['n_subject_person']}")
+    console.print(f"Total trials: {group_summary['n_trials_total']}")
+    console.print(
         f"Mean EEG-decoding accuracy: {group_summary['mean_accuracy']:.3f} "
         f"(chance={group_summary['chance_level']:.3f})"
     )
-    print(
+    console.print(
         "Mean EEG-decoding balanced accuracy: "
         f"{group_summary['mean_balanced_accuracy']:.3f} "
         f"(chance={group_summary['chance_level']:.3f})"
     )
-    print(
+    console.print(
         "Mean EEG probabilities (R/P/S): "
         f"{group_summary['mean_p_rock_eeg']:.3f}, "
         f"{group_summary['mean_p_paper_eeg']:.3f}, "
         f"{group_summary['mean_p_scissors_eeg']:.3f}"
     )
-    print(f"Saved per-trial probabilities: {trial_path}")
-    print(f"Saved per-subject summary: {summary_path}")
-    print(f"Saved timecourse (subject/person): {timecourse_path}")
-    print(f"Saved timecourse (group): {group_timecourse_path}")
-    print(f"Saved group summary: {group_path}")
-    print(f"Saved timecourse plot: {plot_path}")
+    console.print(f"Saved per-trial probabilities: {trial_path}")
+    console.print(f"Saved per-subject summary: {summary_path}")
+    console.print(f"Saved timecourse (subject/person): {timecourse_path}")
+    console.print(f"Saved timecourse (group): {group_timecourse_path}")
+    console.print(f"Saved group summary: {group_path}")
+    console.print(f"Saved timecourse plot: {plot_path}")
 
 
 if __name__ == "__main__":
