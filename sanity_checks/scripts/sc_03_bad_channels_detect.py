@@ -1,7 +1,7 @@
 ﻿"""
 Sanity Check for Step 03: Bad Channels Detect
 
-ÃœberprÃ¼ft:
+Ueberprueft:
 - Bad channels identifiziert
 - QC-Reports erstellt
 - Markierung in Raw-Objekten

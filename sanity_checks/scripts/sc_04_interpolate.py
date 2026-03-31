@@ -1,8 +1,8 @@
 ﻿"""
 Sanity Check for Step 04: Interpolate Bad Channels
 
-ÃœberprÃ¼ft:
-- Interpolation durchgefÃ¼hrt
+Ueberprueft:
+- Interpolation durchgefuehrt
 - Bads-Liste geleert nach Interpolation
 - Kanal-Anzahl gleich geblieben
 - Amplituden noch plausibel

@@ -1,8 +1,8 @@
 ﻿"""
 Sanity Check for Step 02: Rename & Set Montage
 
-ÃœberprÃ¼ft:
-- KanÃ¤le korrekt umbenannt (BioSemi â†’ 10-20)
+Ueberprueft:
+- Kanaele korrekt umbenannt (BioSemi â†’ 10-20)
 - Montage gesetzt
 - Elektroden-Positionen vorhanden
 - Kanal-Metadaten intakt

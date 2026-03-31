@@ -1,10 +1,10 @@
 ﻿"""
 Sanity Check for Step 00: Downsample
 
-ÃœberprÃ¼ft:
-- Downsampling erfolgreich durchgefÃ¼hrt
+Ueberprueft:
+- Downsampling erfolgreich durchgefuehrt
 - Sampling Rate korrekt reduziert
-- DatenlÃ¤nge und -grÃ¶ÃŸe stimmen
+- Datenlaenge und -groesse stimmen
 - Keine Artefakte durch Downsampling
 
 REASONING:

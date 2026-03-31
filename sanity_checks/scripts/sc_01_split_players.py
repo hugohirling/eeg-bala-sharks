@@ -1,11 +1,11 @@
 ﻿"""
 Sanity Check for Step 01: Split Players
 
-ÃœberprÃ¼ft:
+Ueberprueft:
 - Spieler korrekt aufgeteilt
-- KanÃ¤le pro Person korrekt zugeordnet
+- Kanaele pro Person korrekt zugeordnet
 - Kanal-Typen gesetzt
-- Status-Kanal vorhanden fÃ¼r beide
+- Status-Kanal vorhanden fuer beide
 
 REASONING:
 - Purpose: verify that the dyadic recording is split into two analyzable player streams without channel leakage.

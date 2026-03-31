@@ -1,10 +1,10 @@
 ﻿"""
 Sanity Check for Step 07: Epoching
 
-ÃœberprÃ¼ft:
+Ueberprueft:
 - Epochs erfolgreich erstellt
 - Event-Anzahl und -Typen plausibel
-- Epoch-GrÃ¶ÃŸe und Dimensionen
+- Epoch-Groesse und Dimensionen
 - Baseline-Korrektur vorhanden
 - Keine NaN/Inf-Werte
 - Anomalie-Detektion: zu wenige/viele Epochs
