@@ -15,7 +15,7 @@ from pathlib import Path
 from matplotlib.colors import LinearSegmentedColormap
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 SANITY_DIR = BASE_DIR / "sanity_checks"
 SCRIPTS_DIR = SANITY_DIR / "scripts"
 
