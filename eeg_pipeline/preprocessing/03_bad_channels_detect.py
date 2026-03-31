@@ -1,3 +1,5 @@
+# This file has been commented using GitHub Copilot with the Grok Code Fast 1 model.
+
 from pathlib import Path
 import sys
 import csv
@@ -29,6 +31,18 @@ _BAD_CHANNEL_ROWS_CACHE = None
 
 
 def _compute_robust_z(values):
+    """
+    Computes robust Z-scores using median and MAD (Median Absolute Deviation).
+
+    This function calculates Z-scores that are less sensitive to outliers compared
+    to standard Z-scores.
+
+    Args:
+        values (array-like): The values to compute Z-scores for.
+
+    Returns:
+        ndarray: The robust Z-scores.
+    """
     median = np.median(values)
     mad = np.median(np.abs(values - median))
     if mad == 0:
@@ -37,6 +51,15 @@ def _compute_robust_z(values):
 
 
 def _read_tsv_rows(file_path):
+    """
+    Reads rows from a TSV file and returns them as a list of dictionaries.
+
+    Args:
+        file_path (Path): Path to the TSV file.
+
+    Returns:
+        list: List of dictionaries representing the rows.
+    """
     with file_path.open("r", encoding="utf-8", newline="") as file_obj:
         reader = csv.DictReader(file_obj, delimiter="\t")
         rows = []
@@ -46,6 +69,17 @@ def _read_tsv_rows(file_path):
 
 
 def _parse_bad_channel_list(value):
+    """
+    Parses a string or value into a list of bad channel names.
+
+    Handles various formats and edge cases like None, NaN, etc.
+
+    Args:
+        value: The value to parse (str, None, etc.).
+
+    Returns:
+        list: List of bad channel names.
+    """
     if value is None:
         return []
     if isinstance(value, str) and value.strip().lower() in {"nan", "na", "none"}:
@@ -59,6 +93,16 @@ def _parse_bad_channel_list(value):
 
 
 def _get_bad_channels_for_subject(subject_id, person):
+    """
+    Retrieves manually marked bad channels for a subject and person from a TSV file.
+
+    Args:
+        subject_id (str): The subject identifier.
+        person (str): The person ('P1' or 'P2').
+
+    Returns:
+        list: List of bad channel names.
+    """
     global _BAD_CHANNEL_ROWS_CACHE
 
     file_path = config.BAD_CHANNELS_FILE
@@ -86,6 +130,7 @@ def _get_bad_channels_for_subject(subject_id, person):
     if row is None:
         return []
 
+    # Try different column names for bad channels
     person_columns = [
         f"player{person[-1]}_pre_processing_channels_fixed",
         f"bad_channels_{person.lower()}",
@@ -102,6 +147,20 @@ def _get_bad_channels_for_subject(subject_id, person):
 
 
 def _write_qc_report(subject_id, person, channel_names, std_values, z_scores, reasons):
+    """
+    Writes a QC report for bad channel detection to a TSV file.
+
+    Args:
+        subject_id (str): The subject identifier.
+        person (str): The person ('P1' or 'P2').
+        channel_names (list): List of channel names.
+        std_values (list): Standard deviation values.
+        z_scores (list): Z-score values.
+        reasons (list): Reasons for marking channels as bad.
+
+    Returns:
+        Path: Path to the written report file.
+    """
     report_path = config.BAD_CHANNELS_DIR / f"sub-{subject_id}_{person}_bad_channels_detect.tsv"
     with report_path.open("w", encoding="utf-8", newline="") as file_obj:
         file_obj.write("subject_id\tperson\tchannel\tstd\trobust_z\tsuggested\treason\n")
@@ -115,6 +174,18 @@ def _write_qc_report(subject_id, person, channel_names, std_values, z_scores, re
 
 
 def detect_bad_channels(subject_id):
+    """
+    Detects bad channels for a subject based on statistical measures and manual annotations.
+
+    This function loads the raw data, computes statistics, identifies bad channels,
+    and saves the updated data and QC report.
+
+    Args:
+        subject_id (str): The subject identifier.
+
+    Returns:
+        list: List of tuples (person, out_path, report_path, suggested_bads).
+    """
     outputs = []
     for person in ["P1", "P2"]:
         path_in, out_path = get_step_io_files(
@@ -135,16 +206,19 @@ def detect_bad_channels(subject_id):
             raise RuntimeError(f"No EEG channels available for bad-channel detection in {path_in}")
 
         channel_names = [raw.ch_names[idx] for idx in eeg_picks]
+        # Get channel data and compute standard deviations
         channel_data = raw.get_data(picks=eeg_picks, reject_by_annotation="omit")
         std_values = np.std(channel_data, axis=1)
         z_scores = _compute_robust_z(std_values)
 
+        # Get manually marked bad channels
         manual_bads = set(_get_bad_channels_for_subject(subject_id, person))
         manual_bads = {channel for channel in manual_bads if channel in raw.ch_names}
 
         reasons = []
         suggested_bads = []
         auto_suggested_bads = []
+        # Evaluate each channel for bad channel criteria
         for channel, std_value, z_value in zip(channel_names, std_values, z_scores):
             channel_reasons = []
             if std_value <= config.BAD_CHANNEL_FLAT_STD_THRESHOLD:
@@ -161,10 +235,12 @@ def detect_bad_channels(subject_id):
             if "flat" in channel_reasons or "outlier_std" in channel_reasons:
                 auto_suggested_bads.append(channel)
 
+        # Merge existing and suggested bad channels
         existing_bads = set(raw.info.get("bads", []))
         merged_bads = sorted(existing_bads.union(suggested_bads))
         raw.info["bads"] = merged_bads
 
+        # Write QC report
         report_path = _write_qc_report(subject_id, person, channel_names, std_values, z_scores, reasons)
         LOGGER.info(f"Saved bad-channel QC report ({person}) to: {report_path}")
         if manual_bads:
@@ -177,6 +253,7 @@ def detect_bad_channels(subject_id):
 
             LOGGER.info(f"No bad-channel suggestions for {subject_id} {person}.")
 
+        # Save the data, either by copying if no changes or re-saving
         if set(merged_bads) == existing_bads:
             out_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path_in, out_path)

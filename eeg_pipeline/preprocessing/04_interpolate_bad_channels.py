@@ -1,3 +1,5 @@
+# This file has been commented using GitHub Copilot with the Grok Code Fast 1 model.
+
 from pathlib import Path
 import sys
 
@@ -22,6 +24,18 @@ from helper.general.helper_functions import get_step_io_files, save_current_step
 
 
 def interpolate_bad_channels(subject_id):
+    """
+    Interpolates bad channels for a subject.
+
+    This function loads the raw data, identifies bad channels (only A and B channels),
+    interpolates them, and saves the updated data.
+
+    Args:
+        subject_id (str): The subject identifier.
+
+    Returns:
+        list: List of tuples (person, out_path).
+    """
     outputs = []
     for person in ["P1", "P2"]:
         path_in, _ = get_step_io_files(
