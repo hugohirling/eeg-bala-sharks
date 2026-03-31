@@ -60,7 +60,7 @@ class SanityCheckCollector:
         rationale: str = "",
         parameter_note: str = "",
     ):
-        """Add a result entry. status in ('âœ“', 'âš ', 'ERROR')."""
+        """Add a result entry. status in ('OK', 'WARN', 'ERROR')."""
         if subject_id not in self.results:
             self.results[subject_id] = {}
         if person not in self.results[subject_id]:
@@ -68,7 +68,7 @@ class SanityCheckCollector:
 
         if status == "ERROR":
             self.errors.append(f"{subject_id}/{person}: {message}")
-        elif status == "âš ":
+        elif status == "WARN":
             self.warnings.append(f"{subject_id}/{person}: {message}")
 
         self.results[subject_id][person].append(
@@ -85,9 +85,9 @@ class SanityCheckCollector:
     def _console_safe(text: str) -> str:
         return (
             str(text)
-            .replace("âœ“", "[OK]")
-            .replace("âš ", "[!]")
-            .replace("âœ—", "[X]")
+            .replace("OK", "[OK]")
+            .replace("WARN", "[!]")
+            .replace("FAIL", "[X]")
         )
 
     def print_summary(self):
@@ -205,7 +205,7 @@ def compare_amplitudes(
     data_before = raw_before.get_data(picks=eeg_picks, start=0, stop=t_idx_end)
     data_after = raw_after.get_data(picks=eeg_picks, start=0, stop=t_idx_end)
 
-    std_before = np.std(data_before) * 1e6  # Convert to ÂµV
+    std_before = np.std(data_before) * 1e6  # Convert to uV
     std_after = np.std(data_after) * 1e6
 
     change_pct = ((std_after - std_before) / std_before * 100) if std_before != 0 else 0
