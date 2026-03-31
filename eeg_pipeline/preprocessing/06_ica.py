@@ -100,6 +100,9 @@ def run_ica(raw):
     # Filter the data for ICA fitting to focus on frequencies above 1 Hz
     raw_for_fit = raw.copy().filter(l_freq=1.0, h_freq=None)
 
+    eeg_channels = [ch for ch in raw_for_fit.ch_names if ch.startswith(('A', 'B'))]
+    raw_for_fit.pick_channels(eeg_channels)
+
     # Determine the number of ICA components based on available EEG channels
     n_eeg = len(mne.pick_types(raw_for_fit.info, eeg=True, exclude="bads"))
     n_components = min(config.ICA_N_COMPONENTS, n_eeg) if n_eeg > 0 else config.ICA_N_COMPONENTS
