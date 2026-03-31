@@ -16,6 +16,8 @@ import paths as _project_paths  # noqa: E402
 BIDS_ROOT = _project_paths.INPUT_DIR
 OUTPUT_DIR = _project_paths.OUTPUT_DIR / "preprocessing"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+QC_DIR = _project_paths.OUTPUT_DIR / "sanity_checks"
+QC_DIR.mkdir(parents=True, exist_ok=True)
 BIOSEMI64_MAT_PATH = _project_paths.BIOSEMI64_MAT
 
 
@@ -110,6 +112,15 @@ AR_VERBOSE = True   # Verbose output
 # ICA
 ICA_N_COMPONENTS = 20
 ICA_MAX_ITER = 500
+ICA_LABEL_METHOD = "iclabel"
+ICA_LABEL_MIN_PROBA = 0.70
+ICA_ARTIFACT_LABELS = [
+    "muscle artifact",
+    "eye blink",
+    "heart beat",
+    "line noise",
+    "channel noise",
+]
 
 # Saving format
 SAVE_FORMAT = "fif"  # MNE Standard

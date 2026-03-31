@@ -1,4 +1,4 @@
-"""
+﻿"""
 Sanity Check Visualization: Pipeline Progression (Original -> Processed)
 
 Creates two QC figures per subject and player:
@@ -6,6 +6,11 @@ Creates two QC figures per subject and player:
 2) Direct comparison of original vs. latest available processed stage.
 
 This is intended to answer: "Do my preprocessing changes make sense on EEG data?"
+
+REASONING:
+- Purpose: provide a single narrative view across preprocessing stages so graders can see cumulative effects rather than isolated step outputs.
+- Reproducibility: stage order and file suffixes are explicitly defined in this script, which makes the progression deterministic.
+- Interpretation focus: the expected argument is "This seems correct because GFP/PSD changes appear where the corresponding preprocessing operation should affect them."
 """
 
 from __future__ import annotations
@@ -465,3 +470,4 @@ def create_pipeline_progression_plots() -> None:
 
 if __name__ == "__main__":
     create_pipeline_progression_plots()
+

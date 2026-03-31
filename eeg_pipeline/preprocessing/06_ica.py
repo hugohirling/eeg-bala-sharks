@@ -2,6 +2,7 @@ from pathlib import Path
 import sys
 
 import mne
+from mne_icalabel import label_components
 
 CURRENT_DIR = Path(__file__).resolve().parent
 PIPELINE_DIR = CURRENT_DIR.parent
@@ -21,6 +22,34 @@ from preprocessing import config
 from helper.general.helper_functions import get_step_io_files, save_current_step_file
 
 
+def _normalize_iclabel_name(label):
+    return str(label).strip().lower().replace("_", " ")
+
+
+def _classify_artifact_components(raw, ica):
+    result = label_components(raw, ica, method=config.ICA_LABEL_METHOD)
+    labels = result["labels"]
+    probabilities = result["y_pred_proba"]
+    artifact_labels = {_normalize_iclabel_name(label) for label in config.ICA_ARTIFACT_LABELS}
+
+    excluded = []
+    label_index_map = {}
+    for component_idx, (label, probability) in enumerate(zip(labels, probabilities)):
+        normalized_label = _normalize_iclabel_name(label)
+        label_index_map.setdefault(normalized_label, []).append(component_idx)
+        LOGGER.info(
+            "ICA component %02d labeled as %s (p=%.3f)",
+            component_idx,
+            normalized_label,
+            float(probability),
+        )
+        if normalized_label in artifact_labels and float(probability) >= float(config.ICA_LABEL_MIN_PROBA):
+            excluded.append(component_idx)
+
+    ica.labels_ = label_index_map
+    return excluded, labels, probabilities
+
+
 def run_ica(raw):
     print("Running ICA")
 
@@ -37,15 +66,18 @@ def run_ica(raw):
     )
     ica.fit(raw_for_fit)
 
-    eog_channels = mne.pick_types(raw.info, eog=True)
-    if len(eog_channels) > 0:
-        for eog_idx in eog_channels:
-            eog_name = raw.ch_names[eog_idx]
-            bads, _ = ica.find_bads_eog(raw, ch_name=eog_name)
-            for component in bads:
-                if component not in ica.exclude:
-                    ica.exclude.append(component)
+    excluded, labels, probabilities = _classify_artifact_components(raw_for_fit, ica)
+    ica.exclude = sorted(set(excluded))
 
+    LOGGER.info("ICA label threshold: %.2f", float(config.ICA_LABEL_MIN_PROBA))
+    LOGGER.info("ICA artifact labels: %s", ", ".join(config.ICA_ARTIFACT_LABELS))
+    LOGGER.info(
+        "ICA component labels: %s",
+        ", ".join(
+            f"{idx}:{_normalize_iclabel_name(label)}@{float(probability):.2f}"
+            for idx, (label, probability) in enumerate(zip(labels, probabilities))
+        ),
+    )
     LOGGER.info(f"ICA components excluded: {ica.exclude}")
     cleaned = raw.copy()
     ica.apply(cleaned)
