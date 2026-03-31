@@ -22,18 +22,21 @@ eeg-bala-sharks/
 ├─ sanity_checks/        # Jupyter notebooks dedicated to visual diagnostic sanity checks
 ├─ milestones/           # Legacy developmental checkpoints
 ├─ requirements.txt      # Dependency version control
+├─ input                 # Input files
 ├─ output                # Output files
+├─ paths.py                # File to provide paths to input/output
 └─ README.md             # Project documentation
 
 ## Abstracted Preprocessing Pipeline
 To mitigate memory bottlenecks and ensure data quality, our preprocessing pipeline executes the following sequential logic:
 
-1. BIDS Loading & Splitting: Isolate Player 1 and Player 2 data streams.
-2. Immediate Downsampling: Reducing the native 2048 Hz sampling rate to 200 Hz.
-3. Bad Channel Interpolation: Automated robust Z-score flagging and spherical spline interpolation to repair broken electrodes.
-4. Bandpass Filtering: 1.0 Hz - 40.0 Hz.
-5. ICA (Independent Component Analysis): Automated biological artifact rejection via mne-icalabel to remove EOG/ECG interference.
-6. Epoching: Slicing the continuous signal based on customized TSV event triggers into structured decision-making windows.
+1. Data Downsampling: Reducing the native 2048 Hz sampling rate to 200 Hz.
+2. Separating by Player: Isolate Player 1 and Player 2 data streams.
+3. Renaming & Montage: Renaming the channels to 10-20 labels and adding 3D locations.
+4. Interpolation of Bad Channels: Automated robust Z-score flagging and spherical spline interpolation to repair broken electrodes.
+5. Bandpass Filtering: 1.0 Hz - 40.0 Hz.
+6. ICA- Based Artifact Removal: Automated biological artifact rejection via mne-icalabel to remove EOG/ECG interference.
+7. Epoching: Slicing the continuous signal based on customized TSV event triggers into structured decision-making windows.
 
 ## Core Methodologies
 Our analysis pipeline is divided into five distinct methodological approaches:
