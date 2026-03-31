@@ -1,4 +1,5 @@
-﻿"""
+﻿# This file's comments were created with the help of GitHub Copilot using GPT-5.3-Codex.
+"""
 Sanity Check Visualization: Pipeline Progression (Original -> Processed)
 
 Creates two QC figures per subject and player:
@@ -26,10 +27,12 @@ import numpy as np
 from mne_bids import BIDSPath, read_raw_bids
 
 CURRENT_DIR = Path(__file__).resolve().parent
+# Make local sanity-check helpers importable when running as a script.
 if str(CURRENT_DIR) not in sys.path:
     sys.path.insert(0, str(CURRENT_DIR))
 
 PIPELINE_DIR = CURRENT_DIR.parent.parent / "eeg_pipeline"
+# Make pipeline package importable for preprocessing config access.
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
@@ -38,6 +41,8 @@ if str(PREPROCESSING_DIR) not in sys.path:
     sys.path.insert(0, str(PREPROCESSING_DIR))
 
 CONFIG_PATH = PREPROCESSING_DIR / "config.py"
+# Load preprocessing config explicitly by path so this script remains robust
+# regardless of the current working directory or package execution mode.
 _config_spec = importlib.util.spec_from_file_location("preprocessing_config", CONFIG_PATH)
 if _config_spec is None or _config_spec.loader is None:
     raise ImportError(f"Could not load preprocessing config from {CONFIG_PATH}")
@@ -46,12 +51,14 @@ _config_spec.loader.exec_module(config)
 
 
 class StageSpec(NamedTuple):
+    """Static metadata describing one pipeline stage."""
     key: str
     label: str
     person_specific: bool
 
 
 class StageMetrics(NamedTuple):
+    """Computed time/frequency metrics used in progression plots."""
     key: str
     label: str
     times: np.ndarray
@@ -75,6 +82,7 @@ STAGE_ORDER = [
 
 
 def _source_text(subject_id: str, person: str, stage_key: str) -> str:
+    """Return human-readable stage source text for console diagnostics."""
     if stage_key == "original":
         return f"BIDS: sub-{subject_id} task-RPS eeg"
     raw_path = _raw_path_for_stage(subject_id, person, stage_key)
@@ -84,6 +92,7 @@ def _source_text(subject_id: str, person: str, stage_key: str) -> str:
 
 
 def _raw_path_for_stage(subject_id: str, person: str, stage_key: str) -> Path | None:
+    """Resolve file path for a stage, or None for raw BIDS input."""
     if stage_key == "original":
         return None
     if stage_key == "downsampled":
@@ -92,6 +101,8 @@ def _raw_path_for_stage(subject_id: str, person: str, stage_key: str) -> Path | 
 
 
 def _load_raw(subject_id: str, person: str, stage_key: str) -> mne.io.BaseRaw | None:
+    """Load stage data as an MNE Raw object, returning None on failure."""
+    # Original stage is loaded from BIDS, not from intermediate FIF output.
     if stage_key == "original":
         bids_path = BIDSPath(
             subject=subject_id,
@@ -105,6 +116,7 @@ def _load_raw(subject_id: str, person: str, stage_key: str) -> mne.io.BaseRaw | 
         except Exception:
             return None
 
+    # All processed stages are expected as FIF files in preprocessing output.
     raw_path = _raw_path_for_stage(subject_id, person, stage_key)
     if raw_path is None or not raw_path.exists():
         return None
@@ -116,6 +128,10 @@ def _load_raw(subject_id: str, person: str, stage_key: str) -> mne.io.BaseRaw | 
 
 
 def _person_eeg_picks(raw: mne.io.BaseRaw, person: str, stage_key: str) -> list[int]:
+    """Select EEG channels belonging to one person for a given stage.
+
+    Early stages still carry player prefixes; later stages are already split.
+    """
     if stage_key in {"original", "downsampled"}:
         prefix = config.PLAYER_PREFIX_MAP[person]
         channel_types = raw.get_channel_types()
@@ -127,6 +143,7 @@ def _person_eeg_picks(raw: mne.io.BaseRaw, person: str, stage_key: str) -> list[
         if picks:
             return picks
 
+    # For already split/renamed stages, regular EEG picks are sufficient.
     return list(mne.pick_types(raw.info, eeg=True, exclude=[]))
 
 
@@ -137,10 +154,16 @@ def _compute_stage_metrics(
     stage_label: str,
     duration_sec: float = 30.0,
 ) -> StageMetrics | None:
+    """Compute comparable stage metrics for progression visualization.
+
+    Returns synchronized time-domain and PSD summaries from the same stage.
+    """
+    # Restrict computation to person-specific EEG channels.
     eeg_picks = _person_eeg_picks(raw, person, stage_key)
     if len(eeg_picks) == 0:
         return None
 
+    # Use a bounded analysis window for stable and fast comparisons.
     sfreq = float(raw.info["sfreq"])
     n_samples = min(int(duration_sec * sfreq), raw.n_times)
     if n_samples < 10:
@@ -148,7 +171,7 @@ def _compute_stage_metrics(
 
     data = raw.get_data(picks=eeg_picks, start=0, stop=n_samples)
 
-    # Global Field Power as robust channel-agnostic signal summary.
+    # GFP provides channel-agnostic overall activity magnitude over time.
     gfp_uv = np.std(data, axis=0) * 1e6
     times = np.arange(n_samples) / sfreq
 
@@ -162,6 +185,7 @@ def _compute_stage_metrics(
     else:
         candidate_names = preferred_names
 
+    # Choose a representative trace channel with stage-aware fallback rules.
     trace_pick = None
     for ch_name in candidate_names:
         if ch_name in raw.ch_names:
@@ -173,6 +197,7 @@ def _compute_stage_metrics(
     trace_uv = raw.get_data(picks=[trace_pick], start=0, stop=n_samples)[0] * 1e6
     trace_channel = raw.ch_names[trace_pick]
 
+    # Compute PSD on the same temporal window as time-domain summaries.
     max_time = n_samples / sfreq
     raw_for_psd = raw.copy().pick(eeg_picks).crop(tmin=0.0, tmax=max_time, include_tmax=False)
     spectrum = raw_for_psd.compute_psd(method="welch", fmin=0.5, fmax=45.0, verbose=False)
@@ -192,9 +217,11 @@ def _compute_stage_metrics(
 
 
 def _plot_progression(subject_id: str, person: str, metrics: list[StageMetrics]) -> Path:
+    """Plot full-stage progression for GFP and PSD in one figure."""
     fig, axes = plt.subplots(2, 1, figsize=(13, 9))
     n = len(metrics)
 
+    # Color progression by stage order to make cumulative changes readable.
     for idx, m in enumerate(metrics):
         color = plt.cm.viridis(idx / max(n - 1, 1))
         axes[0].plot(m.times, m.gfp_uv, color=color, linewidth=1.6, label=m.label)
@@ -221,6 +248,7 @@ def _plot_progression(subject_id: str, person: str, metrics: list[StageMetrics])
 
 
 def _plot_original_vs_latest(subject_id: str, person: str, first: StageMetrics, last: StageMetrics) -> Path:
+    """Plot direct original-vs-latest comparison (time and PSD)."""
     fig, axes = plt.subplots(1, 2, figsize=(13, 4.6))
 
     axes[0].plot(
@@ -270,12 +298,15 @@ def _plot_butterfly_original_vs_latest(
     duration_sec: float = 10.0,
     max_channels: int = 20,
 ) -> Path | None:
+    """Plot butterfly overlays for original and latest stage EEG data."""
+    # Determine person-specific EEG picks for both comparison endpoints.
     first_picks = _person_eeg_picks(first_raw, person, first_stage_key)
     last_picks = _person_eeg_picks(last_raw, person, last_stage_key)
 
     if len(first_picks) == 0 or len(last_picks) == 0:
         return None
 
+    # Limit channels for readability and plotting performance.
     first_picks = first_picks[:max_channels]
     last_picks = last_picks[:max_channels]
 
@@ -292,6 +323,7 @@ def _plot_butterfly_original_vs_latest(
     first_times = np.arange(first_n_samples) / first_sfreq
     last_times = np.arange(last_n_samples) / last_sfreq
 
+    # Two stacked panels: top=original endpoint, bottom=latest endpoint.
     fig, axes = plt.subplots(2, 1, figsize=(14, 8), sharex=False)
 
     axes[0].plot(first_times, first_data_uv.T, linewidth=0.6, alpha=0.6)
@@ -334,6 +366,7 @@ def _plot_butterfly_original_vs_latest(
 
 
 def _safe_file_label(label: str) -> str:
+    """Convert stage labels into filesystem-safe filename tokens."""
     return (
         label.lower()
         .replace("+", "plus")
@@ -344,6 +377,7 @@ def _safe_file_label(label: str) -> str:
 
 
 def _plot_step_transition(subject_id: str, person: str, prev_m: StageMetrics, next_m: StageMetrics) -> Path:
+    """Plot pairwise transition diagnostics between adjacent stages."""
     fig, axes = plt.subplots(1, 2, figsize=(13, 4.6))
 
     axes[0].plot(
@@ -384,6 +418,14 @@ def _plot_step_transition(subject_id: str, person: str, prev_m: StageMetrics, ne
 
 
 def create_pipeline_progression_plots() -> None:
+    """Generate progression, endpoint, butterfly, and transition plots.
+
+    For each subject/person pair:
+    - gather available stage metrics
+    - build multi-stage progression plots
+    - compare first vs latest stage
+    - optionally create butterfly and adjacent-transition views
+    """
     print("\n" + "=" * 80)
     print("SANITY CHECK: Pipeline progression plots (Original -> Processed)")
     print("=" * 80)
@@ -395,6 +437,7 @@ def create_pipeline_progression_plots() -> None:
             print(f"\n{person}:")
             metrics: list[StageMetrics] = []
 
+            # Collect metrics in fixed stage order; skip missing/unusable stages.
             for stage in STAGE_ORDER:
                 source = _source_text(subject_id=subject_id, person=person, stage_key=stage.key)
                 raw = _load_raw(subject_id=subject_id, person=person, stage_key=stage.key)
@@ -415,6 +458,7 @@ def create_pipeline_progression_plots() -> None:
                 metrics.append(stage_metrics)
                 print(f"  - {stage.label}: ok ({source})")
 
+            # Need at least two valid stages for meaningful progression plots.
             if len(metrics) < 2:
                 print("  WARNING: Need at least 2 stages to plot progression. Skipping.")
                 continue
@@ -422,6 +466,7 @@ def create_pipeline_progression_plots() -> None:
             progression_path = _plot_progression(subject_id=subject_id, person=person, metrics=metrics)
             print(f"  Saved progression plot: {progression_path.name}")
 
+            # First and last available stages define endpoint comparison.
             original = metrics[0]
             latest = metrics[-1]
             compare_path = _plot_original_vs_latest(
@@ -434,6 +479,7 @@ def create_pipeline_progression_plots() -> None:
 
             original_raw = _load_raw(subject_id=subject_id, person=person, stage_key=original.key)
             latest_raw = _load_raw(subject_id=subject_id, person=person, stage_key=latest.key)
+            # Butterfly plot is optional and depends on successful raw loading.
             if original_raw is not None and latest_raw is not None:
                 butterfly_path = _plot_butterfly_original_vs_latest(
                     subject_id=subject_id,
@@ -452,6 +498,7 @@ def create_pipeline_progression_plots() -> None:
             else:
                 print("  INFO: Could not generate butterfly plot (stage files missing).")
 
+            # Also generate adjacent transition plots for stepwise interpretation.
             if len(metrics) >= 2:
                 print("  Creating adjacent step-transition plots...")
                 for prev_m, next_m in zip(metrics[:-1], metrics[1:]):

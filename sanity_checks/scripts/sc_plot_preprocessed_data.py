@@ -1,4 +1,5 @@
-﻿"""
+﻿# This file's comments were created with the help of GitHub Copilot using GPT-5.3-Codex.
+"""
 Plot cleaned preprocessed EEG data after pipeline completion.
 
 Usage:
@@ -31,6 +32,7 @@ import numpy as np
 
 CURRENT_DIR = Path(__file__).resolve().parent
 PIPELINE_DIR = CURRENT_DIR.parent.parent / "eeg_pipeline"
+# Ensure pipeline package imports work when this script is run directly.
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
@@ -45,6 +47,13 @@ STEP_SUFFIXES = {
 
 
 def parse_args():
+    """Parse command-line arguments for plot generation.
+
+    This parser exposes three core controls:
+    - subject subset
+    - pipeline stage to visualize
+    - output directory override
+    """
     parser = argparse.ArgumentParser(
         description="Visualize preprocessed EEG data after pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -88,14 +97,16 @@ def get_subjects(subject_str):
 
 def plot_raw_timeseries(raw, subject_id, person, step, duration, output_dir):
     """Plot raw time series with topography."""
+    # Restrict view to the requested duration or available recording length.
     t_end = min(duration, raw.times[-1])
-    t_idx_end = int(t_end * raw.info["sfreq"])
 
+    # Focus plotting on EEG channels only to avoid mixed-channel clutter.
     eeg_picks = mne.pick_types(raw.info, eeg=True)
     if len(eeg_picks) == 0:
         print(f"  No EEG channels found for sub-{subject_id} {person}")
         return
 
+    # Use MNE's interactive-style raw plot rendered off-screen, then export.
     fig = raw.plot(
         picks=eeg_picks[:16],  # Plot first 16 channels
         start=0,
@@ -116,6 +127,7 @@ def plot_raw_timeseries(raw, subject_id, person, step, duration, output_dir):
 
 def plot_psd(raw, subject_id, person, step, output_dir):
     """Plot power spectral density."""
+    # Compute PSD from EEG-only channels for interpretable spectra.
     raw_eeg = raw.copy().pick_types(eeg=True)
 
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -131,6 +143,7 @@ def plot_psd(raw, subject_id, person, step, output_dir):
 
 def plot_topomap(raw, subject_id, person, step, output_dir):
     """Plot sensor layout."""
+    # Use EEG channels only; non-EEG channels usually lack scalp coordinates.
     raw_eeg = raw.copy().pick_types(eeg=True)
 
     # Keep MNE's standard topomap projection from the 3D montage coordinates.
@@ -151,14 +164,14 @@ def plot_topomap(raw, subject_id, person, step, output_dir):
 
 def plot_epochs(epochs, subject_id, person, output_dir):
     """Plot sample epochs with statistics."""
+    # Guard against empty epoch objects so plotting functions don't fail.
     if len(epochs) == 0:
         print(f"  No epochs for sub-{subject_id} {person}")
         return
 
     # Plot first 4 epochs
     n_epochs_to_plot = min(4, len(epochs))
-    eeg_picks = mne.pick_types(epochs.info, eeg=True)
-
+    # Render a compact sample of first epochs for quick visual QC.
     fig = epochs[:n_epochs_to_plot].plot(
         show=False,
         n_epochs=n_epochs_to_plot,
@@ -172,7 +185,7 @@ def plot_epochs(epochs, subject_id, person, output_dir):
     plt.close(fig)
     print(f"  OK Sample epochs plot saved: {plot_path.name}")
 
-    # Plot event distribution
+    # Event-type histogram documents class balance and missing-event issues.
     fig, ax = plt.subplots(figsize=(10, 6))
     event_counts = {}
     for event_type, event_id in epochs.event_id.items():
@@ -195,16 +208,16 @@ def plot_epochs(epochs, subject_id, person, output_dir):
 
 def plot_data_quality(raw, subject_id, person, step, output_dir):
     """Plot data quality metrics."""
+    # Abort gracefully if no EEG channels are present.
     eeg_picks = mne.pick_types(raw.info, eeg=True)
     if len(eeg_picks) == 0:
         return
 
-    # Get sample of data
+    # Analyze a bounded sample window for fast and stable QC stats.
     max_samples = min(int(raw.info["sfreq"] * 120), raw.n_times)
     data = raw.get_data(picks=eeg_picks, start=0, stop=max_samples)
 
-    # Compute metrics per channel
-    channel_names = [raw.ch_names[idx] for idx in eeg_picks]
+    # Per-channel summary metrics used in distribution/scatter diagnostics.
     std_values = np.std(data, axis=1)
     min_values = np.min(data, axis=1)
     max_values = np.max(data, axis=1)
@@ -241,6 +254,13 @@ def plot_data_quality(raw, subject_id, person, step, output_dir):
 
 
 def main():
+    """Entry point for preprocessing QC plot generation.
+
+    Workflow:
+    1. Resolve CLI options and subjects.
+    2. Load either raw or epoch files depending on selected step.
+    3. Generate and save a consistent set of QC plots per subject/person.
+    """
     args = parse_args()
 
     subjects = get_subjects(args.subjects)
@@ -248,6 +268,7 @@ def main():
     suffix = STEP_SUFFIXES.get(step, "ica_cleaned")
     duration = args.duration
 
+    # Allow explicit output location or default to configured QC directory.
     output_dir = Path(args.save_dir) if args.save_dir else config.QC_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -264,6 +285,7 @@ def main():
         print(f"\n--- Subject {subject_id} ---")
 
         for person in ["P1", "P2"]:
+            # Step 07 stores epoch objects; earlier steps store continuous raw FIF.
             if step == "07":  # Epochs
                 file_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_{suffix}.fif"
                 if not file_path.exists():
@@ -271,6 +293,7 @@ def main():
                     continue
 
                 try:
+                    # Load metadata lazily (preload=False) for lighter memory use.
                     epochs = mne.read_epochs(str(file_path), preload=False, verbose=False)
                     print(f"\n  {person}:")
                     print(f"    Epochs: {len(epochs)}")
@@ -288,6 +311,7 @@ def main():
                     continue
 
                 try:
+                    # Load raw object lazily and then generate all continuous-data views.
                     raw = mne.io.read_raw_fif(str(file_path), preload=False, verbose=False)
                     print(f"\n  {person}:")
                     print(f"    Duration: {raw.times[-1]:.1f}s")
