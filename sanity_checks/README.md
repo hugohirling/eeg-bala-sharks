@@ -1,203 +1,174 @@
-# Sanity Checks für EEG-Pipeline
+# Sanity Checks for EEG Pipeline
 
-Diese Verzeichnis enthält Sanity-Check Scripts für jeden Schritt der EEG-Preprocessing-Pipeline. Die Checks überprüfen Metadaten, Datenqualität und plausible Wertebereiche.
+This directory contains sanity check scripts for every step of the EEG preprocessing and analysis pipeline. The checks verify metadata, data quality, and plausible value ranges.
 
-## Warum diese Checks wichtig sind
+## Why these checks are important
 
-Diese Sanity-Check-Suite ist nicht nur als technische Fehlersuche gedacht, sondern auch als **bewertbare Dokumentation** für die Pipeline-Entscheidungen.
+This sanity check suite is not only intended for technical troubleshooting but also acts as **assessable documentation** for the pipeline decisions.
 
-- **Code readability & documentation:** Die Skripte enthalten jetzt direkt im Code dokumentierte Motivation, Parameternotizen und Interpretationshilfen.
-- **Reproducibility & modularity:** Relevante Schwellenwerte kommen aus `preprocessing/config.py` oder sind im Skript explizit dokumentiert; die CSV-Summaries machen Runs vergleichbar.
-- **Sanity checks & discussion:** Konsolen- und CSV-Ausgaben enthalten neben Statusmeldungen auch kurze Sätze wie `This seems correct because ...` oder `This is strange because ...`.
-- **Result interpretation:** Die Visualisierungen sind als Before/After-Vergleiche aufgebaut, damit sichtbare Änderungen direkt argumentiert werden können.
+- **Code readability & documentation:** The scripts now contain motivations, parameter notes, and interpretation guides documented directly in the code.
+- **Reproducibility & modularity:** Relevant thresholds come from `preprocessing/config.py` or are explicitly documented in the script; the CSV summaries make runs comparable.
+- **Sanity checks & discussion:** Console and CSV outputs contain status messages alongside short sentences like `This seems correct because ...` or `This is strange because ...`.
+- **Result interpretation:** The visualizations are structured as Before/After comparisons so that visible changes can be directly argued.
 
-Die zentrale Leitfrage pro Schritt lautet daher:
+The central guiding question for each step is therefore:
 
-> Verändert dieser Preprocessing-Schritt genau das, was er verändern soll, und lässt er alles andere unverändert?
+> Does this processing step change exactly what it is supposed to change, and does it leave everything else unchanged?
 
-## Verfügbare Sanity Checks
+## Available Sanity Checks
 
-Die **primären Entry-Points** sind jetzt die Step-Skripte `sc_00_...` bis `sc_07_...`. Für die Steps 00, 01, 02, 03, 04 und 07 unterstützen diese Skripte den Modus `--mode check`, `--mode viz` oder `--mode both`.
+The **primary entry points** are the step scripts `sc_00_...` to `sc_10_...`. For the paired steps, these scripts support the modes `--mode check`, `--mode viz`, or `--mode both`.
 
-| Step | Überprüfungs-Script | Visualisierungs-Script | Beschreibung |
+| Step | Check Script | Visualization Script | Description |
 |------|--------|--------|-----------|
-| 00 | `sc_00_downsample.py` | optional via `--mode viz` | Downsampling: Sampling-Rate, Datenreduktion, Zeit-Serie & PSD Vergleich |
-| 01 | `sc_01_split_players.py` | optional via `--mode viz` | Split-Players: P1 vs P2 Datenverteilung, Duration, Kanäle |
-| 02 | `sc_02_rename_montage.py` | optional via `--mode viz` | Rename & Montage: Kanal-Namen-Mapping, Sensor-Layout 2D Topomap |
-| 03 | `sc_03_bad_channels_detect.py` | optional via `--mode viz` | Bad Channels: Topomap mit Markierungen, Amplitude vor/nach |
-| 04 | `sc_04_interpolate.py` | optional via `--mode viz` | Interpolation: Zeitreihen der interpolierten Kanäle, Amplitude, Montage |
-| 05 | `sc_05_filter.py` | (in sc_05_filter.py) | Bandpass-Filter (1-40 Hz): PSD vor/nach Vergleich |
-| 06 | `sc_06_ica.py` | (in sc_06_ica.py) | ICA Artifact Removal: Komponenten, EOG-Erkennung |
-| 07 | `sc_07_epoch.py` | optional via `--mode viz` | Epoching: Event-Verteilung, Beispiel-Epochs, PSD Vergleich, Baseline-Fenster |
-| 08 | — | `sc_08_pipeline_progression_plots.py` | **Gesamt-Übersicht**: GFP + PSD über alle Stages (Original → ICA) |
+| 00 | `sc_00_downsample.py` | optional via `--mode viz` | Downsampling: Sampling rate, Data reduction, Time-Series & PSD |
+| 01 | `sc_01_split_players.py` | optional via `--mode viz` | Split Players: P1 vs P2 data distribution, duration, channels |
+| 02 | `sc_02_rename_montage.py` | optional via `--mode viz` | Rename & Montage: Channel name mapping, Sensor layout 2D Topomap |
+| 03 | `sc_03_bad_channels.py` | optional via `--mode viz` | Bad Channels: Topomap with markers, Amplitude before/after |
+| 04 | `sc_04_interpolate.py` | optional via `--mode viz` | Interpolation: Time series of interpolated channels, Amplitude, Montage |
+| 05 | `sc_05_filter.py` | (in sc_05_filter.py) | Bandpass Filter (1-40 Hz): PSD before/after comparison |
+| 06 | `sc_06_ica.py` | (in sc_06_ica.py) | ICA Artifact Removal: Components, EOG detection |
+| 07 | `sc_07_epoch.py` | optional via `--mode viz` | Epoching: Event distribution, Example epochs, PSD comparison, Baseline |
+| 08 | `sc_08_behavioral.py` | (in sc_08_behavioral.py) | Behavioral: Markov Transition Probability Matrices, Variance |
+| 09 | `sc_09_time_freq.py` | (in sc_09_time_freq.py) | Time-Frequency: Morlet wavelets, Alpha-band ERD heatmaps |
+| 10 | `sc_10_advanced_mvpa.py`| (in sc_10_advanced_mvpa.py)| Decoding: Temporal Generalization Matrices, Cross-Brain MVPA |
+| All | — | `sc_pipeline_progression.py` | **Overall View**: GFP + PSD across all stages (Original → ICA) |
 
-## Verwendung
+## Usage
 
-### Kombinierte Step-Skripte für Check und Visualisierung
+### Combined Step-Scripts for Check and Visualization
 
-Die bevorzugte Nutzung für die gepaarten Steps ist jetzt jeweils ein gemeinsames Step-Skript:
+The preferred usage for the paired steps is via a joint step-script:
 
-```bash
-# Step 00: Text-Check
 python sanity_checks/scripts/sc_00_downsample.py --mode check
-
-# Step 00: Nur Visualisierung
 python sanity_checks/scripts/sc_00_downsample.py --mode viz --subjects 01,02 --duration 30
-
-# Step 00: Check + Visualisierung
 python sanity_checks/scripts/sc_00_downsample.py --mode both --subjects 01,02 --duration 30
-
-# Step 03: Check + Visualisierung
-python sanity_checks/scripts/sc_03_bad_channels_detect.py --mode both --subjects 01,02
-
-# Step 04: Nur Visualisierung
+python sanity_checks/scripts/sc_03_bad_channels.py --mode both --subjects 01,02
 python sanity_checks/scripts/sc_04_interpolate.py --mode viz --subjects 01,02 --duration 30
-
-# Step 07: Nur Visualisierung
 python sanity_checks/scripts/sc_07_epoch.py --mode viz --subjects 01,02
-```
+python sanity_checks/scripts/sc_08_behavioral.py --mode both
+python sanity_checks/scripts/sc_09_time_freq.py --mode both
+python sanity_checks/scripts/sc_10_advanced_mvpa.py --mode both
 
-### Automatische Qualitätsüberprüfung (Text-Output)
+### Automatic Quality Checks (Text Output)
 
-Weitere Checks (Step 05-07) sind integriert:
-
-```bash
-# Step 05: Filter überprüfen
 python sanity_checks/scripts/sc_05_filter.py
-
-# Step 06: ICA überprüfen
 python sanity_checks/scripts/sc_06_ica.py
-
-# Step 07: Epoching überprüfen
 python sanity_checks/scripts/sc_07_epoch.py
-```
 
-### Übersicht über alle Preprocessing-Stages
+### Overview across all Preprocessing Stages
 
-```bash
-# GFP + PSD über die gesamte Pipeline (Original → alle verfügbaren Steps)
-python sanity_checks/scripts/sc_08_pipeline_progression_plots.py
-```
+python sanity_checks/scripts/sc_pipeline_progression.py
 
-### Verarbeitete Daten schnell visualisieren
+### Quickly Visualize Processed Data
 
-```bash
-# Gefilterte/ICA-bereinigte Daten plotten (mit Time Series, PSD, Topomaps, Amplituden)
 python sanity_checks/scripts/sc_plot_preprocessed_data.py --subjects 01,02 --step 06 --duration 60
-```
 
-### Alle Sanity Checks in Folge (optional)
-```bash
-for script in sanity_checks/scripts/sc_*.py; do python "$script"; done
-```
+### Run all Sanity Checks sequentially (Automated Master Run)
 
-- **Notebooks liegen unter** `sanity_checks/notebooks/`
-- **Python-Checks liegen unter** `sanity_checks/scripts/`
+python sanity_checks/run_all_checks.py
 
-## Ausgaben
+- **Notebooks are located under** `sanity_checks/notebooks/`
+- **Python-Checks are located under** `sanity_checks/scripts/`
 
-### Visualisierungs-Plots (output/qc/)
+## Outputs
 
-Jeder Preprocessing-Step generiert spezifische Visualisierungs-Plots:
+### Visualization Plots (output/qc/)
+
+Every pipeline step generates specific visualization plots:
 
 **Step 00 - Downsample:**
-- `sub-XX_P1_downsample_timeseries_comparison.png` — Zeitreihen Original vs. Downsampled
-- `sub-XX_P1_downsample_psd_comparison.png` — Frequenzspektrum Vergleich
-- `sub-XX_P1_downsample_statistics_comparison.png` — Amplitude & Dateigröße
+- `sub-XX_P1_downsample_timeseries_comparison.png` — Time series Original vs. Downsampled
+- `sub-XX_P1_downsample_psd_comparison.png` — Frequency spectrum comparison
+- `sub-XX_P1_downsample_statistics_comparison.png` — Amplitude & File size
 
 **Step 01 - Split Players:**
-- `sub-XX_split_players_data_summary.png` — P1 vs P2 Datenverteilung (Duration, Kanäle, Größe)
-- `sub-XX_split_players_amplitude_dist.png` — Amplituden-Histogramm pro Player
+- `sub-XX_split_players_data_summary.png` — P1 vs P2 data distribution (Duration, Channels, Size)
+- `sub-XX_split_players_amplitude_dist.png` — Amplitude histogram per Player
 
 **Step 02 - Rename & Montage:**
 - `sub-XX_P1_montage_topomap.png` — Sensor-Layout Topomap
-- `sub-XX_P1_montage_channel_mapping.png` — Kanal-Namen Vorher/Nachher
+- `sub-XX_P1_montage_channel_mapping.png` — Channel names Before/After
 - `sub-XX_P1_montage_coverage_stats.png` — Standard 10-20 System Coverage
 
 **Step 03 - Bad Channels Detection:**
-- `sub-XX_P1_bad_channels_topomap.png` — Topomap mit Markierten Bad-Channels
-- `sub-XX_P1_bad_channels_amplitudes.png` — Amplitude Vergleich Good vs. Bad
-- `sub-XX_P1_bad_channels_qc_metrics.png` — QC-Metriken (optional)
+- `sub-XX_P1_bad_channels_topomap.png` — Topomap with Marked Bad-Channels
+- `sub-XX_P1_bad_channels_amplitudes.png` — Amplitude comparison Good vs. Bad
+- `sub-XX_P1_bad_channels_qc_metrics.png` — QC metrics (optional)
 
 **Step 04 - Interpolation:**
-- `sub-XX_P1_interpolate_montage_comparison.png` — Sensor-Layout Vorher/Nachher
-- `sub-XX_P1_interpolate_timeseries.png` — Zeitreihen interpolierter Kanäle
-- `sub-XX_P1_interpolate_statistics.png` — Amplitude vor/nach Interpolation
+- `sub-XX_P1_interpolate_montage_comparison.png` — Sensor-Layout Before/After
+- `sub-XX_P1_interpolate_timeseries.png` — Time series of interpolated channels
+- `sub-XX_P1_interpolate_statistics.png` — Amplitude before/after Interpolation
+
+**Step 05, 06 & Pipeline:**
+- `sub-XX_P1_filter_psd_comparison.png` — Filter effect (PSD)
+- `sub-XX_P1_ica_detailed_comparison.png` — ICA Amplitude reduction
+- `sub-XX_P1_pipeline_progression_gfp_psd.png` — GFP + PSD across all stages
 
 **Step 07 - Epoching:**
-- `sub-XX_P1_epoch_event_distribution.png` — Histogram: Anzahl Epochen pro Event-Typ
-- `sub-XX_P1_epoch_examples.png` — Beispiel-Epochs mit Baseline-Fenster
-- `sub-XX_P1_epoch_psd_comparison.png` — PSD Vergleich: kontinuierlich vs. epochiert
-- `sub-XX_P1_epoch_statistics.png` — Metadaten-Summary (Dimensionen, Baseline, Bad Channels)
+- `sub-XX_P1_epoch_event_distribution.png` — Histogram: Epoch count per Event type
+- `sub-XX_P1_epoch_examples.png` — Example epochs with Baseline window
+- `sub-XX_P1_epoch_psd_comparison.png` — PSD comparison: continuous vs epoched
+- `sub-XX_P1_epoch_statistics.png` — Metadata summary 
 
-**Step 05-08:**
-- `sub-XX_P1_filter_psd_comparison.png` — Filter-Effekt (PSD)
-- `sub-XX_P1_ica_detailed_comparison.png` — ICA Amplituden-Reduktion
-- `sub-XX_P1_epochs_sample.png` — Sample Epochs-Visualisierung
-- `sub-XX_P1_pipeline_progression_gfp_psd.png` — GFP + PSD über alle Stages
+**Step 08 - Behavioral:**
+- `sub-XX_sanity_check_markov_matrix.png` — Markov transition matrices
+- `group_sanity_check_behavioral_variance.png` — Behavioral heuristic variance
+
+**Step 09 - Time-Frequency:**
+- `sub-XX_sanity_check_tfr_ersp.png` — Alpha-band ERD heatmaps
+
+**Step 10 - Advanced MVPA:**
+- `sub-XX_decoding_tgm_matrix.png` — TGM models
+- `sub-XX_decoding_cross_brain.png` — Cross-Brain accuracy traces
 
 ### Console Output
 
-- Detaillierte Überprüfungs-Ergebnisse mit ✓ (bestanden) und ⚠/ERROR (Warnung/Fehler)
-- Statistik-Zusammenfassungen pro Subject/Player
+- Detailed validation results with Pass and Warning/Error
+- Statistic summaries per Subject/Player
+- CSV export structured with `Status`, `Category`, `Message`, `Rationale`, and `ParameterNote`
 
-## Hinweise
+## Hints
 
-- Sanity Checks laden Daten mit `preload=False` um Speicher zu sparen
-- Für große Zeitfenster werden begrenzte Stichproben verwendet (z.B. erste 60-120 Sekunden)
-- Checks sind so kurz gehalten, dass sie nach jedem entsprechenden Pipeline-Schritt schnell laufen können
-- Text-Checks exportieren strukturierte CSV-Dateien mit `Status`, `Category`, `Message`, `Rationale` und `ParameterNote`
+- Sanity Checks load data with `preload=False` to save memory.
+- For large time windows, limited samples are used (e.g., first 60-120 seconds).
+- Checks are kept short so they can run quickly after their respective pipeline step.
 
-## Wie die Diskussion formuliert werden sollte
+## How the discussion should be formulated
 
-Für die Bewertung reicht ein reines `✓` oft nicht aus. Die Diskussion sollte pro Step mindestens einen der folgenden Satztypen enthalten:
+For the grading, a simple Pass is often not enough. The discussion in `SANITY_CHECK_DISCUSSION.md` should contain at least one of the following sentence types per step:
 
 - `This seems correct because ...`
 - `This is strange because ...`
 - `This parameter choice is justified because ...`
 
-Beispiele:
-
+Examples:
 - `This seems correct because the downsampled file keeps the same duration while reducing the sampling rate and estimated size.`
 - `This is strange because the bad-channel fraction is unusually high and may indicate a recording-wide quality problem.`
 - `This parameter choice is justified because the 1-40 Hz filter keeps conventional EEG bands while suppressing slow drifts and high-frequency noise.`
 
-## Grading-Strategie (20% "Sanity Checks & Visualizations & Discussion")
+## Grading Strategy (20% "Sanity Checks & Visualizations & Discussion")
 
-Diese Sanity-Check-Suite adressiert alle **8 Preprocessing-Steps** mit umfangreichen Visualisierungen:
+This sanity check suite addresses all steps with comprehensive visualizations:
 
-### Coverage ✓
-- **Steps 00-04:** Dedizierte Visualisierungs-Skripte mit Before/After-Vergleichen
-- **Steps 05-07:** Integrierte Plots in bestehenden Überprüfungs-Skripten
-- **Gesamt-Übersicht:** `sc_08_pipeline_progression_plots.py` zeigt GFP + PSD über alle Stages
+### Coverage 
+- Steps 00-10: Dedicated visualization scripts with Before/After comparisons
+- Overall View: `sc_pipeline_progression.py` shows GFP + PSD across all stages
 
-### Visualisierungs-Qualität ✓
-- **Time Series:** Wellenform-Vergleiche (z.B. Downsample, Interpolation)
-- **Frequenz-Domain:** PSD-Vergleiche (z.B. Filter, Downsample)
-- **Topomaps:** Sensor-Layout & Bad-Channel-Markierungen (z.B. Montage, Bad Channels)
-- **Statistiken:** Amplitude, Datenverteilung, QC-Metriken pro Step
+### Visualization Quality 
+- Time Series: Waveform comparisons (Downsample, Interpolation)
+- Frequency-Domain: PSD comparisons (Filter, Downsample, ERSP)
+- Topomaps: Sensor layout & Channel markers
+- Heatmaps: Transition matrices, TGM accuracy
 
-### Modularität ✓
-- Jeder Step hat ein eigenes Visualisierungs-Skript → leicht zu wartbar/erweiterbar
-- Einheitliche Code-Struktur (Argparse, Logging, Output-Dirs)
-- Wiederverwendbare Plotting-Funktionen
+### Modularity
+- Each step has its own script -> easy to maintain/expand
+- Unified code structure (Argparse, Logging, Output-Dirs)
 
-### Diskussion
-Zusätzlich sollte eine **SANITY_CHECK_DISCUSSION.md** erstellt werden, die für jeden Step erklärt:
-- Was zeigt der Plot?
-- Sind die sichtbaren Änderungen erwartbar/plausibel?
-- Welche Metriken werden überwacht?
-- Warum sind genau diese Parameter oder Schwellenwerte sinnvoll?
-- Beispiel:
-  ```
-  ## Step 00: Downsample
-  **Erwartung:** 2048 Hz → 200 Hz (10x Reduktion), Dateigröße ~10% Original, 
-  Power oberhalb 100 Hz sollte komplett weg sein
-  **Beobachtung:** ✓ Alle Metriken erfüllt
-  **Interpretation:** This seems correct because the lower sampling rate reduces storage cost without changing channel count or duration.
-  
-  ## Step 03: Bad Channels
-  **Erwartung:** Typischerweise 1-5 der 64 Kanäle als schlecht markiert
-  **Beobachtung:** 2 Kanäle markiert (Fp1, EOG links) — plausibel
-  **Interpretation:** This seems correct because the affected channels stand out locally and do not reflect a global amplitude shift across the whole cap.
-  ```
+### Discussion
+Additionally, a `SANITY_CHECK_DISCUSSION.md` explains for each step:
+- What does the plot show?
+- Are the visible changes expected/plausible?
+- Which metrics are monitored?
+- Why are exactly these parameters useful?
