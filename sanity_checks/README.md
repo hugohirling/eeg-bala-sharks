@@ -13,7 +13,7 @@ Diese Verzeichnis enthält Sanity-Check Scripts für jeden Schritt der EEG-Prepr
 | 04 | `sc_04_interpolate.py` | **`sc_04_interpolate_viz.py`** | Interpolation: Zeitreihen der interpolierten Kanäle, Amplitude, Montage |
 | 05 | `sc_05_filter.py` | (in sc_05_filter.py) | Bandpass-Filter (1-40 Hz): PSD vor/nach Vergleich |
 | 06 | `sc_06_ica.py` | (in sc_06_ica.py) | ICA Artifact Removal: Komponenten, EOG-Erkennung |
-| 07 | `sc_07_epoch.py` | (in sc_plot_preprocessed_data.py) | Epoching: Epochs Sample, Event-Verteilung |
+| 07 | `sc_07_epoch.py` | **`sc_07_epoch_viz.py`** | Epoching: Event-Verteilung, Beispiel-Epochs, PSD Vergleich, Baseline-Fenster |
 | 08 | — | `sc_08_pipeline_progression_plots.py` | **Gesamt-Übersicht**: GFP + PSD über alle Stages (Original → ICA) |
 
 ## Verwendung
@@ -37,6 +37,9 @@ python sanity_checks/scripts/sc_03_bad_channels_viz.py --subjects 01,02
 
 # Step 04: Interpolation (Zeitreihen der interpolierten Kanäle)
 python sanity_checks/scripts/sc_04_interpolate_viz.py --subjects 01,02 --duration 30
+
+# Step 07: Epoching-Effekt (Event-Verteilung, Beispiel-Epochs, PSD-Vergleich)
+python sanity_checks/scripts/sc_07_epoch_viz.py --subjects 01,02
 ```
 
 ### Automatische Qualitätsüberprüfung (Text-Output)
@@ -105,6 +108,12 @@ Jeder Preprocessing-Step generiert spezifische Visualisierungs-Plots:
 - `sub-XX_P1_interpolate_montage_comparison.png` — Sensor-Layout Vorher/Nachher
 - `sub-XX_P1_interpolate_timeseries.png` — Zeitreihen interpolierter Kanäle
 - `sub-XX_P1_interpolate_statistics.png` — Amplitude vor/nach Interpolation
+
+**Step 07 - Epoching:**
+- `sub-XX_P1_epoch_event_distribution.png` — Histogram: Anzahl Epochen pro Event-Typ
+- `sub-XX_P1_epoch_examples.png` — Beispiel-Epochs mit Baseline-Fenster
+- `sub-XX_P1_epoch_psd_comparison.png` — PSD Vergleich: kontinuierlich vs. epochiert
+- `sub-XX_P1_epoch_statistics.png` — Metadaten-Summary (Dimensionen, Baseline, Bad Channels)
 
 **Step 05-08:**
 - `sub-XX_P1_filter_psd_comparison.png` — Filter-Effekt (PSD)
