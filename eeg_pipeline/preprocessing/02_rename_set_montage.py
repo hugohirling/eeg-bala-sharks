@@ -96,9 +96,9 @@ def _rename_eeg_channels(raw, person):
         raw.rename_channels(strip_prefix_map)
 
     # Remove non-EEG channels starting with 'C' or 'D'
-    channels_to_drop = [ch for ch in raw.ch_names if ch.startswith("C") or ch.startswith("D")]
-    if channels_to_drop:
-        raw.drop_channels(channels_to_drop)
+    channels_to_pick = [ch for ch in raw.ch_names if ch.startswith("A") or ch.startswith("B")]
+    if channels_to_pick:
+        raw.pick_channels(channels_to_pick)
 
     # Map remaining channels to 10-20 system labels
     mapping_1020 = {
