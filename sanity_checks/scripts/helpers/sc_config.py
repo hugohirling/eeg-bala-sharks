@@ -36,6 +36,9 @@ STEP_CHECK_FILES = {
     "05": "sc_05_filter.py",
     "06": "sc_06_ica.py",
     "07": "sc_07_epoch.py",
+    "08": "sc_08_behavioral.py",
+    "09": "sc_09_tf.py",
+    "10": "sc_10_neuralDecoding.py",
 }
 
 
