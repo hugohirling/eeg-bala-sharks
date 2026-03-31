@@ -39,7 +39,7 @@ def _save_montage_visualizations(raw, subject_id, person):
     raw_eeg = raw.copy().pick("eeg")
 
     fig_2d = raw_eeg.plot_sensors(kind="topomap", show_names=True, show=False)
-    fig_2d.suptitle(f"sub-{subject_id} {person} EEG sensor layout (2D)")
+    fig_2d.subtitle(f"sub-{subject_id} {person} EEG sensor layout (2D)")
     out_2d = config.QC_DIR / f"sub-{subject_id}_{person}_montage_positions_2d.png"
     fig_2d.savefig(out_2d, dpi=200, bbox_inches="tight")
     plt.close(fig_2d)
@@ -47,7 +47,7 @@ def _save_montage_visualizations(raw, subject_id, person):
 
     try:
         fig_3d = raw_eeg.plot_sensors(kind="3d", show_names=False, show=False)
-        fig_3d.suptitle(f"sub-{subject_id} {person} EEG sensor layout (3D)")
+        fig_3d.subtitle(f"sub-{subject_id} {person} EEG sensor layout (3D)")
         out_3d = config.QC_DIR / f"sub-{subject_id}_{person}_montage_positions_3d.png"
         fig_3d.savefig(out_3d, dpi=200, bbox_inches="tight")
         plt.close(fig_3d)

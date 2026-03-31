@@ -62,7 +62,7 @@ def plot_montage_topomap(raw, subject_id, person, output_dir):
         return
 
     fig = raw_eeg.plot_sensors(kind="topomap", show_names=True, show=False, sphere="eeglab")
-    fig.suptitle(f"sub-{subject_id} {person} - EEG Sensor Layout (Montage)")
+    fig.subtitle(f"sub-{subject_id} {person} - EEG Sensor Layout (Montage)")
 
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_montage_topomap.png", dpi=150)
     plt.close(fig)
