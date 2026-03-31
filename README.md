@@ -25,7 +25,7 @@ eeg-bala-sharks/
 ├─ requirements.txt      # Dependency version control
 ├─ input                 # Input files
 ├─ output                # Output files
-├─ paths.py                # File to provide paths to input/output
+├─ paths.py              # File to provide paths to input/output
 └─ README.md             # Project documentation
 ```
 
