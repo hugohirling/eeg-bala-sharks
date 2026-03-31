@@ -1,3 +1,7 @@
+# Decision-phase EEG decoding of strategic RPS states (current/previous strategy of self or opponent).
+# Trains an LDA classifier on binned decision-epoch features to predict strategy labels
+# derived from the behavioural event log; reports accuracy, permutation p-values, and
+# group-level t-tests against 0.5 chance.
 from __future__ import annotations
 
 import argparse
@@ -9,6 +13,9 @@ import matplotlib.pyplot as plt
 import mne
 import numpy as np
 import pandas as pd
+from rich.console import Console
+from rich.live import Live
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 from scipy.stats import ttest_1samp
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import StratifiedKFold, cross_val_score, permutation_test_score
@@ -35,8 +42,31 @@ from _rps_decoding_utils import (
     resolve_subjects,
 )
 
+# ---------------------------------------------------------------------------
+# Rich progress / console setup
+# ---------------------------------------------------------------------------
+progress = Progress(
+    TextColumn("[bold blue]{task.description}"),
+    BarColumn(),
+    MofNCompleteColumn(),
+    TimeElapsedColumn(),
+    TimeRemainingColumn(),
+)
+console = Console()
+
 
 def _classifier() -> Pipeline:
+    """
+    Builds a standard LDA decoding pipeline.
+
+    The pipeline applies z-score normalisation (StandardScaler) before fitting
+    a regularised Linear Discriminant Analysis classifier.  Shrinkage is set to
+    'auto' so that the optimal shrinkage coefficient is estimated analytically
+    via the Ledoit-Wolf lemma rather than by cross-validation.
+
+    Returns:
+        Pipeline: Scikit-learn pipeline with steps [scaler, lda].
+    """
     return Pipeline(
         steps=[
             ("scaler", StandardScaler()),
@@ -46,6 +76,23 @@ def _classifier() -> Pipeline:
 
 
 def _prepare_data(X_full: np.ndarray, y_full: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Aligns feature and label arrays and removes unlabelled trials.
+
+    Decision-epoch features are obtained from MNE epochs while behavioural
+    labels come from the event log; slight length mismatches can occur due to
+    epoch rejection.  This function truncates both arrays to the same length
+    and then keeps only trials with a valid strategy label (code 1 or 2).
+
+    Args:
+        X_full (np.ndarray): Feature array of shape (n_trials, n_channels, n_times).
+        y_full (np.ndarray): Integer label array of shape (n_trials,).
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]:
+            - X: Features for trials with valid strategy labels, shape (n_valid, n_channels, n_times).
+            - y: Corresponding integer labels, shape (n_valid,).
+    """
     n = min(len(X_full), len(y_full))
     X = X_full[:n]
     y = y_full[:n]
@@ -61,6 +108,38 @@ def _decode_subject_person(
     n_permutations: int,
     random_state: int,
 ) -> dict:
+    """
+    Decodes a strategy target from decision-phase EEG for one subject/player.
+
+    Loads event metadata and EEG features, constructs binary strategy labels,
+    then iterates over time bins within the decision epoch.  For each bin the
+    binned channel-mean features are decoded with stratified k-fold cross-
+    validation and a permutation test to estimate the null-hypothesis p-value.
+
+    Args:
+        subject_id (str): Subject identifier without the 'sub-' prefix.
+        person (str): Player role, either 'P1' or 'P2'.
+        target (str): Strategy target key from STRATEGY_CHOICES.
+        n_splits (int): Maximum number of stratified CV folds; capped by the
+            minority class size to prevent empty test folds.
+        n_permutations (int): Number of label-shuffle iterations per bin for
+            the permutation p-value estimate.
+        random_state (int): Random seed for deterministic CV splits and
+            permutation sampling.
+
+    Returns:
+        dict: Result dictionary containing:
+            - subject, person, phase, target, match_status
+            - n_trials_used, class_counts
+            - cv_accuracy_mean, cv_accuracy_std, chance_level, above_chance
+            - permutation_pvalue (minimum across bins), n_permutations, n_splits_used
+            - bin_starts_s, bin_ends_s, bin_centers_s (timing metadata)
+            - bin_scores, bin_permutation_pvalues (per-bin arrays)
+
+    Raises:
+        ValueError: If fewer than two distinct classes are present after
+            label filtering, or if per-class trial count is too low for CV.
+    """
     events_df = load_events_df(subject_id)
     labels = build_strategy_labels(events_df, person, target)
     features = load_phase_features(subject_id, person, ["decision"])["decision"]
@@ -139,12 +218,44 @@ def run_decoding(
     n_permutations: int,
     random_state: int,
 ) -> tuple[list[dict], dict]:
+    """
+    Runs decision-phase strategy decoding across all subjects and both players.
+
+    Progress is rendered in the terminal via a Rich live progress bar.  Each
+    subject/player pair is passed to `_decode_subject_person`; failed pairs are
+    logged as warnings and skipped.  After decoding, group-level statistics are
+    computed from the per-subject mean accuracies using a one-sample t-test
+    against the 0.5 binary chance level.
+
+    Args:
+        subjects (list[str]): Subject IDs to process.
+        target (str): Strategy target key from STRATEGY_CHOICES.
+        n_splits (int): Maximum number of CV folds (see _decode_subject_person).
+        n_permutations (int): Number of permutation samples per time bin.
+        random_state (int): Random seed.
+
+    Returns:
+        tuple[list[dict], dict]:
+            - rows: List of per-subject/player result dicts (see _decode_subject_person).
+            - summary: Group-level summary containing target info, mean/std accuracy,
+              count above chance, and t-test statistics.
+
+    Raises:
+        RuntimeError: If no valid decoding result was produced for any subject.
+    """
     rows: list[dict] = []
-    for subject_id in subjects:
-        for person in ["P1", "P2"]:
-            try:
-                rows.append(
-                    _decode_subject_person(
+
+    with Live(progress, console=console, refresh_per_second=1) as live:
+        total_items = len(subjects) * 2
+        task_id = progress.add_task(f"Decoding {target}", total=total_items)
+
+        for subject_id in subjects:
+            for person in ["P1", "P2"]:
+                try:
+                    progress.update(task_id, description=f"{target}: sub-{subject_id} {person}")
+                    live.refresh()
+
+                    row = _decode_subject_person(
                         subject_id=subject_id,
                         person=person,
                         target=target,
@@ -152,9 +263,17 @@ def run_decoding(
                         n_permutations=n_permutations,
                         random_state=random_state,
                     )
-                )
-            except Exception as exc:
-                print(f"sub-{subject_id} {person}: skipped ({exc})")
+                    rows.append(row)
+                    console.print(
+                        f"[green]✓[/green] sub-{subject_id} {person}: "
+                        f"accuracy={row['cv_accuracy_mean']:.3f}  "
+                        f"p={row['permutation_pvalue']:.4f}"
+                    )
+                except Exception as exc:
+                    console.print(f"[yellow]⚠[/yellow] sub-{subject_id} {person}: skipped ({exc})")
+
+                progress.advance(task_id)
+                live.refresh()
 
     if not rows:
         raise RuntimeError(f"No valid rows produced for strategy target={target}.")
@@ -178,6 +297,21 @@ def run_decoding(
 
 
 def _to_dataframe(rows: list[dict]) -> pd.DataFrame:
+    """
+    Converts per-subject decoding result dicts into a flat summary DataFrame.
+
+    Bin-level array fields and the nested class_counts dict are unpacked into
+    scalar columns so that the resulting table is directly usable for CSV
+    export and group-level statistical analysis.
+
+    Args:
+        rows (list[dict]): List of result dicts as returned by
+            _decode_subject_person.
+
+    Returns:
+        pd.DataFrame: One row per subject/player with summary accuracy and
+            metadata columns; bin-level arrays are excluded.
+    """
     flat_rows = []
     for row in rows:
         flat = dict(row)
@@ -194,6 +328,22 @@ def _to_dataframe(rows: list[dict]) -> pd.DataFrame:
 
 
 def _to_timecourse_dataframe(rows: list[dict]) -> pd.DataFrame:
+    """
+    Expands per-subject result dicts into a tidy per-bin time-course DataFrame.
+
+    Each row in the output corresponds to one time bin for one subject/player
+    combination, enabling group-level time-course plots and bin-wise statistics.
+
+    Args:
+        rows (list[dict]): List of result dicts as returned by
+            _decode_subject_person, each containing bin-level array fields.
+
+    Returns:
+        pd.DataFrame: Long-format DataFrame with columns subject, person,
+            target, match_status, bin_index, bin_start_s, bin_end_s,
+            bin_center_s, accuracy, permutation_pvalue, chance_level,
+            n_trials_used.
+    """
     records: list[dict] = []
     for row in rows:
         for bin_index, (start_s, end_s, center_s, score, pvalue) in enumerate(
@@ -225,6 +375,20 @@ def _to_timecourse_dataframe(rows: list[dict]) -> pd.DataFrame:
 
 
 def _save_accuracy_plot(df: pd.DataFrame, summary: dict, out_dir: Path) -> None:
+    """
+    Saves a bar chart of per-subject balanced accuracy with standard-deviation error bars.
+
+    Each bar represents one subject/player combination.  The binary chance level
+    (0.5) and group mean accuracy are visualised as horizontal reference lines.
+    The figure is saved as 'decision_strategy_accuracy.png' in out_dir.
+
+    Args:
+        df (pd.DataFrame): Summary DataFrame from _to_dataframe, containing
+            cv_accuracy_mean and cv_accuracy_std columns.
+        summary (dict): Group-level summary dict from run_decoding; used for
+            chance level, mean accuracy, and the plot title.
+        out_dir (Path): Directory in which to write the figure file.
+    """
     labels = [f"sub-{row.subject}_{row.person}" for row in df.itertuples(index=False)]
     values = df["cv_accuracy_mean"].to_numpy(dtype=float)
     errors = df["cv_accuracy_std"].to_numpy(dtype=float)
@@ -248,6 +412,20 @@ def _save_accuracy_plot(df: pd.DataFrame, summary: dict, out_dir: Path) -> None:
 
 
 def _save_timecourse_plot(timecourse_df: pd.DataFrame, summary: dict, out_dir: Path) -> None:
+    """
+    Saves a time-course line plot of group-mean balanced accuracy across decision bins.
+
+    Bins are averaged across all subject/player pairs; a shaded ±1 SD band and a
+    dashed chance line are included.  X-tick labels show the bin time range in
+    seconds.  The figure is saved as 'decision_strategy_timecourse.png' in out_dir.
+
+    Args:
+        timecourse_df (pd.DataFrame): Long-format per-bin DataFrame from
+            _to_timecourse_dataframe.
+        summary (dict): Group-level summary dict from run_decoding; used for
+            the chance level and plot title.
+        out_dir (Path): Directory in which to write the figure file.
+    """
     grouped = (
         timecourse_df.groupby(["bin_index", "bin_center_s", "bin_start_s", "bin_end_s"], as_index=False)
         .agg(mean_accuracy=("accuracy", "mean"), std_accuracy=("accuracy", "std"))
@@ -279,6 +457,18 @@ def _save_timecourse_plot(timecourse_df: pd.DataFrame, summary: dict, out_dir: P
 
 
 def main() -> None:
+    """
+    CLI entry point for decision-phase strategy-state decoding.
+
+    Parses command-line arguments, resolves subjects and strategy targets,
+    then runs full decoding for each target.  Per-target outputs written to
+    'decoding/strategy/<target>/' include:
+        - strategy_decoding_summary.json  (group statistics)
+        - decision_strategy_results.csv   (per-subject summary)
+        - decision_strategy_timecourse.csv (per-bin time course)
+        - decision_strategy_accuracy.png  (accuracy bar chart)
+        - decision_strategy_timecourse.png (time-course line plot)
+    """
     mne.set_config("MNE_LOGGING_LEVEL", "ERROR")
 
     parser = argparse.ArgumentParser(description="Decision-phase EEG decoding of strategic RPS states.")
@@ -324,10 +514,10 @@ def main() -> None:
         _save_accuracy_plot(df, summary, out_dir)
         _save_timecourse_plot(timecourse_df, summary, out_dir)
 
-        print(f"\n=== {summary['target_label']} ===")
-        print(f"Output directory: {out_dir}")
-        print(f"Mean balanced accuracy: {summary['mean_accuracy']:.3f}")
-        print(f"One-tailed p > chance: {summary['group_pvalue_one_tailed_gt_chance']:.6f}")
+        console.print(f"\n[bold]=== {summary['target_label']} ===[/bold]")
+        console.print(f"Output directory : {out_dir}")
+        console.print(f"Mean balanced accuracy : {summary['mean_accuracy']:.3f} ± {summary['std_accuracy']:.3f}")
+        console.print(f"One-tailed p > chance  : {summary['group_pvalue_one_tailed_gt_chance']:.6f}")
 
 
 if __name__ == "__main__":

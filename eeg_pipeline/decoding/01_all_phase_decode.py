@@ -1,3 +1,4 @@
+# Comments in this file were added with the help of GitHub Copilot (GPT-5.3-Codex).
 from __future__ import annotations
 
 import argparse
@@ -56,6 +57,15 @@ progress = Progress(
 
 
 def _classifier() -> Pipeline:
+    """
+    Builds the scikit-learn decoding pipeline used for all analyses in this script.
+
+    The pipeline applies z-scoring per feature and then fits a shrinkage-enabled
+    LDA classifier, which is robust for high-dimensional EEG features.
+
+    Returns:
+        Pipeline: Configured sklearn Pipeline with StandardScaler and LDA.
+    """
     return Pipeline(
         steps=[
             ("scaler", StandardScaler()),
@@ -65,6 +75,20 @@ def _classifier() -> Pipeline:
 
 
 def _prepare_phase_data(X_full: np.ndarray, y_full: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Aligns feature and label arrays and filters to valid Rock-Paper-Scissors classes.
+
+    Feature matrices and label vectors can differ in length due to preprocessing
+    or event alignment. This helper truncates both to the common minimum and keeps
+    only trials with labels 1, 2, or 3.
+
+    Args:
+        X_full (np.ndarray): Feature array with shape (n_trials, n_channels, n_times).
+        y_full (np.ndarray): Label vector with shape (n_trials,).
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: Filtered feature matrix and label vector.
+    """
     n = min(len(X_full), len(y_full))
     X = X_full[:n]
     y = y_full[:n]
@@ -84,6 +108,31 @@ def _decode_phase(
     n_permutations: int,
     random_state: int,
 ) -> dict:
+    """
+    Runs phase-specific decoding for one subject/player/target combination.
+
+    The function computes balanced-accuracy cross-validation scores per time bin,
+    performs permutation tests per bin, and returns both aggregate metrics and
+    bin-resolved outputs for downstream tables and plots.
+
+    Args:
+        subject_id (str): Subject identifier (without sub- prefix).
+        person (str): Player identity, typically P1 or P2.
+        phase (str): Task phase key, e.g. decision, response, or feedback.
+        target (str): Target definition key (current/previous self/other).
+        match_state (str): Match-status label computed from events.
+        X_full (np.ndarray): Phase feature matrix (trials x channels x times).
+        y_full (np.ndarray): Trial labels aligned to the target definition.
+        n_splits (int): Maximum number of CV folds.
+        n_permutations (int): Number of permutations for significance testing.
+        random_state (int): Random seed for CV shuffling and permutations.
+
+    Returns:
+        dict: Summary and time-bin metrics for one decoded phase.
+
+    Raises:
+        ValueError: If fewer than three classes are present or CV is infeasible.
+    """
     X, y = _prepare_phase_data(X_full, y_full)
     classes, class_counts = np.unique(y, return_counts=True)
     if len(classes) < 3:
@@ -91,6 +140,7 @@ def _decode_phase(
             f"Not enough classes for sub-{subject_id} {person} {target} {phase}: {classes.tolist()}"
         )
 
+    # Keep CV feasible for class-imbalanced data by respecting the rarest class.
     actual_splits = min(n_splits, int(class_counts.min()))
     if actual_splits < 2:
         raise ValueError(
@@ -114,6 +164,7 @@ def _decode_phase(
     for index in range(n_bins):
         start = bin_edges[index]
         stop = bin_edges[index + 1]
+        # Collapse each time bin to channel-wise mean features for decoding.
         X_bin = X[:, :, start:stop].mean(axis=2)
 
         cv_scores = cross_val_score(clf, X_bin, y, cv=cv, scoring="balanced_accuracy", n_jobs=-1)
@@ -146,6 +197,7 @@ def _decode_phase(
         "chance_level": chance_level,
         "above_chance": bool(np.mean(bin_scores) > chance_level),
         "permutation_accuracy": float(np.mean(bin_scores)),
+        # Use the most significant bin-level permutation p-value as a compact summary.
         "permutation_pvalue": float(np.min(bin_perm_pvalues)),
         "n_permutations": int(n_permutations),
         "n_splits_used": int(actual_splits),
@@ -166,6 +218,24 @@ def _decode_subject_person(
     n_permutations: int,
     random_state: int,
 ) -> dict[str, dict]:
+    """
+    Decodes all requested phases for one subject/player and one target definition.
+
+    This helper centralizes data loading and label construction so each phase can
+    be decoded consistently with the same labels and metadata.
+
+    Args:
+        subject_id (str): Subject identifier (without sub- prefix).
+        person (str): Player identity, typically P1 or P2.
+        target (str): Target definition key.
+        phases (list[str]): List of phase keys to decode.
+        n_splits (int): Maximum number of cross-validation folds.
+        n_permutations (int): Number of permutations per bin.
+        random_state (int): Random seed used for deterministic behavior.
+
+    Returns:
+        dict[str, dict]: Mapping phase -> decoding result dictionary.
+    """
     events_df = load_events_df(subject_id)
     labels = build_target_labels(events_df, person, target)
     match_state = match_status(events_df, person)
@@ -196,6 +266,29 @@ def run_decoding(
     n_permutations: int,
     random_state: int,
 ) -> tuple[dict[str, list[dict]], dict]:
+    """
+    Executes decoding over all subjects and both players for one target setting.
+
+    During execution, progress is rendered via Rich. After per-subject decoding,
+    the function computes group-level statistics per phase including t-tests
+    against chance level.
+
+    Args:
+        subjects (list[str]): Subject IDs to include.
+        target (str): Target definition key.
+        phases (list[str]): Phase keys to decode.
+        n_splits (int): Maximum number of CV folds.
+        n_permutations (int): Number of permutation samples per time bin.
+        random_state (int): Random seed.
+
+    Returns:
+        tuple[dict[str, list[dict]], dict]:
+            - rows_by_phase: Per-phase list of per-subject/person result dicts.
+            - summary: Group-level summary statistics for reporting.
+
+    Raises:
+        RuntimeError: If no valid decoding result could be produced.
+    """
     rows_by_phase = {phase: [] for phase in phases}
 
     with Live(progress, console=console, refresh_per_second=1) as live:
@@ -257,6 +350,18 @@ def run_decoding(
 
 
 def _to_dataframe(rows: list[dict]) -> pd.DataFrame:
+    """
+    Converts per-run result dictionaries into a flat summary dataframe.
+
+    Time-bin arrays and nested class-count fields are flattened/expanded so the
+    resulting table is easy to inspect and export.
+
+    Args:
+        rows (list[dict]): Result dictionaries from decoding.
+
+    Returns:
+        pd.DataFrame: Flat table with one row per subject/person/phase result.
+    """
     flat_rows = []
     for row in rows:
         flat = dict(row)
@@ -273,6 +378,18 @@ def _to_dataframe(rows: list[dict]) -> pd.DataFrame:
 
 
 def _to_timecourse_dataframe(rows: list[dict]) -> pd.DataFrame:
+    """
+    Expands bin-level metrics into long-format records for time-course plotting.
+
+    Each output row corresponds to one subject/person and one time bin, including
+    timing metadata, accuracy, and permutation p-value.
+
+    Args:
+        rows (list[dict]): Result dictionaries containing bin arrays.
+
+    Returns:
+        pd.DataFrame: Long-format dataframe for temporal decoding analyses.
+    """
     records: list[dict] = []
     for row in rows:
         for bin_index, (start_s, end_s, center_s, score, pvalue) in enumerate(
@@ -305,6 +422,21 @@ def _to_timecourse_dataframe(rows: list[dict]) -> pd.DataFrame:
 
 
 def _save_accuracy_plot(df: pd.DataFrame, summary: dict, out_dir: Path, phase: str) -> Path:
+    """
+    Creates and saves a per-subject/player bar plot of decoding performance.
+
+    The plot includes error bars (std), chance-level line, and group-mean line
+    to support quick visual quality checks of phase-wise decoding.
+
+    Args:
+        df (pd.DataFrame): Flat phase dataframe with mean/std decoding metrics.
+        summary (dict): Group summary dictionary for annotations.
+        out_dir (Path): Output directory.
+        phase (str): Phase key used in title and filename.
+
+    Returns:
+        Path: Location of the saved PNG file.
+    """
     labels = [f"sub-{row.subject}_{row.person}" for row in df.itertuples(index=False)]
     values = df["cv_accuracy_mean"].to_numpy(dtype=float)
     errors = df["cv_accuracy_std"].to_numpy(dtype=float)
@@ -341,6 +473,21 @@ def _save_accuracy_plot(df: pd.DataFrame, summary: dict, out_dir: Path, phase: s
 
 
 def _save_timecourse_plot(timecourse_df: pd.DataFrame, summary: dict, out_dir: Path, phase: str) -> Path:
+    """
+    Creates and saves the group-level decoding time course for one phase.
+
+    Accuracy is averaged across all subject/player rows per bin and plotted with
+    +-1 SD shading plus a chance-level reference line.
+
+    Args:
+        timecourse_df (pd.DataFrame): Long-format bin-wise decoding metrics.
+        summary (dict): Group summary dictionary.
+        out_dir (Path): Output directory.
+        phase (str): Phase key used in title and filename.
+
+    Returns:
+        Path: Location of the saved PNG file.
+    """
     grouped = (
         timecourse_df.groupby(["bin_index", "bin_center_s", "bin_start_s", "bin_end_s"], as_index=False)
         .agg(mean_accuracy=("accuracy", "mean"), std_accuracy=("accuracy", "std"))
@@ -366,7 +513,7 @@ def _save_timecourse_plot(timecourse_df: pd.DataFrame, summary: dict, out_dir: P
         rotation=45,
         ha="right",
     )
-    ax.set_ylim(max(0.0, float(np.min(y - yerr)) - 0.03), max(0.45, float(np.max(y + yerr)) + 0.03))
+    ax.set_ylim(max(0.2, float(np.min(y - yerr)) - 0.03), max(0.38, float(np.max(y + yerr)) + 0.03))
     ax.grid(axis="y", alpha=0.25)
     ax.legend()
     fig.tight_layout()
@@ -384,6 +531,22 @@ def _save_timecourse_plot_by_person(
     person: str,
     phase: str,
 ) -> Path | None:
+    """
+    Creates and saves a person-specific decoding time course for one phase.
+
+    The function filters rows for P1 or P2, computes per-bin group means, and
+    saves the plot. If no rows exist for the requested person, no file is saved.
+
+    Args:
+        timecourse_df (pd.DataFrame): Long-format bin-wise decoding metrics.
+        summary (dict): Group summary dictionary.
+        out_dir (Path): Output directory.
+        person (str): Person label to filter (P1 or P2).
+        phase (str): Phase key used in title and filename.
+
+    Returns:
+        Path | None: Saved file path, or None when no data is available.
+    """
     person_df = timecourse_df[timecourse_df["person"] == person].copy()
     if person_df.empty:
         return None
@@ -413,7 +576,7 @@ def _save_timecourse_plot_by_person(
         rotation=45,
         ha="right",
     )
-    ax.set_ylim(max(0.0, float(np.min(y - yerr)) - 0.03), max(0.45, float(np.max(y + yerr)) + 0.03))
+    ax.set_ylim(max(0.2, float(np.min(y - yerr)) - 0.03), max(0.38, float(np.max(y + yerr)) + 0.03))
     ax.grid(axis="y", alpha=0.25)
     ax.legend()
     fig.tight_layout()
@@ -431,6 +594,21 @@ def _save_target_outputs(
     *,
     plot_only: bool,
 ) -> None:
+    """
+    Writes decoding outputs for a target and generates all phase-level plots.
+
+    In normal mode, this function persists summary JSON and CSV outputs. In
+    plot-only mode, it reloads existing CSVs and regenerates visualizations.
+
+    Args:
+        out_dir (Path): Target-specific output directory.
+        rows_by_phase (dict[str, list[dict]]): Per-phase decoding rows.
+        summary (dict): Group summary statistics.
+        plot_only (bool): If True, skip writing new metrics and only replot.
+
+    Returns:
+        None
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path_summary = out_dir / "decoding_summary.json"
 
@@ -457,6 +635,15 @@ def _save_target_outputs(
 
 
 def main() -> None:
+    """
+    CLI entry point for all-phase decoding and visualization generation.
+
+    The routine parses arguments, resolves targets/phases, runs decoding unless
+    plot-only is requested, writes outputs, and prints compact terminal summaries.
+
+    Returns:
+        None
+    """
     mne.set_config("MNE_LOGGING_LEVEL", "ERROR")
 
     parser = argparse.ArgumentParser(

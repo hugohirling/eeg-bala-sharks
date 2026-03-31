@@ -1,3 +1,4 @@
+# Comments in this file were added with the help of GitHub Copilot (GPT-5.3-Codex).
 from __future__ import annotations
 
 import argparse
@@ -11,6 +12,9 @@ import matplotlib.pyplot as plt
 import mne
 import numpy as np
 from mne.filter import filter_data
+from rich.console import Console
+from rich.live import Live
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 from scipy.signal import hilbert
 
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -20,6 +24,20 @@ if str(PIPELINE_DIR) not in sys.path:
 
 from preprocessing import config
 
+console = Console()
+progress = Progress(
+    TextColumn("[progress.description]{task.description}"),
+    BarColumn(),
+    MofNCompleteColumn(),
+    TextColumn("•"),
+    TimeElapsedColumn(),
+    TextColumn("•"),
+    TimeRemainingColumn(),
+    console=console,
+    transient=False,
+    refresh_per_second=10,
+)
+
 DEFAULT_BANDS: dict[str, tuple[float, float]] = {
     "theta": (4.0, 7.0),
     "alpha": (8.0, 12.0),
@@ -28,6 +46,15 @@ DEFAULT_BANDS: dict[str, tuple[float, float]] = {
 
 
 def _resolve_subjects(subjects_arg: str | None) -> list[str]:
+    """
+    Resolves and normalizes subject IDs from CLI input.
+
+    Args:
+        subjects_arg (str | None): Comma-separated subject list or None.
+
+    Returns:
+        list[str]: Normalized subject IDs (zero-padded when numeric).
+    """
     def _normalize(value: str) -> str:
         value = value.strip()
         return value.zfill(2) if value.isdigit() else value
@@ -38,6 +65,20 @@ def _resolve_subjects(subjects_arg: str | None) -> list[str]:
 
 
 def _parse_bands(bands_arg: str | None) -> dict[str, tuple[float, float]]:
+    """
+    Parses frequency-band configuration from CLI string.
+
+    Expected format: name:fmin-fmax,name2:fmin-fmax.
+
+    Args:
+        bands_arg (str | None): Raw --bands argument.
+
+    Returns:
+        dict[str, tuple[float, float]]: Mapping band name -> (fmin, fmax).
+
+    Raises:
+        ValueError: If band syntax or boundaries are invalid.
+    """
     if not bands_arg:
         return dict(DEFAULT_BANDS)
 
@@ -67,7 +108,15 @@ def _parse_bands(bands_arg: str | None) -> dict[str, tuple[float, float]]:
 
 
 def _fdr_bh(p_values: np.ndarray) -> np.ndarray:
-    # Benjamini-Hochberg adjusted p-values.
+    """
+    Applies Benjamini-Hochberg FDR correction to p-values.
+
+    Args:
+        p_values (np.ndarray): Raw p-values.
+
+    Returns:
+        np.ndarray: FDR-adjusted p-values (NaN preserved for non-finite inputs).
+    """
     p = np.asarray(p_values, dtype=float)
     out = np.full_like(p, np.nan, dtype=float)
     finite_mask = np.isfinite(p)
@@ -91,10 +140,27 @@ def _fdr_bh(p_values: np.ndarray) -> np.ndarray:
 
 
 def _epoch_path(subject_id: str, person: str) -> Path:
+    """Builds the expected epoch-file path for one subject/player."""
     return Path(config.OUTPUT_DIR) / f"sub-{subject_id}_{person}_epoch.fif"
 
 
 def _load_pair_decision_epochs(subject_id: str, tmin: float, tmax: float) -> tuple[mne.Epochs, mne.Epochs]:
+    """
+    Loads aligned decision-phase EEG epochs for P1 and P2.
+
+    Args:
+        subject_id (str): Subject identifier.
+        tmin (float): Start of analysis window in seconds.
+        tmax (float): End of analysis window in seconds.
+
+    Returns:
+        tuple[mne.Epochs, mne.Epochs]: Trial-aligned EEG epochs for P1 and P2.
+        Only shared EEG channels with names starting with A or B are retained.
+
+    Raises:
+        FileNotFoundError: If epoch files are missing.
+        RuntimeError: If channel overlap or aligned trial count is insufficient.
+    """
     p1_path = _epoch_path(subject_id, "P1")
     p2_path = _epoch_path(subject_id, "P2")
     if not p1_path.exists() or not p2_path.exists():
@@ -106,15 +172,20 @@ def _load_pair_decision_epochs(subject_id: str, tmin: float, tmax: float) -> tup
             message=r"This filename .* does not conform to MNE naming conventions\.",
             category=RuntimeWarning,
         )
-        p1_epochs = mne.read_epochs(str(p1_path), preload=True, verbose=False).crop(tmin=tmin, tmax=tmax)
-        p2_epochs = mne.read_epochs(str(p2_path), preload=True, verbose=False).crop(tmin=tmin, tmax=tmax)
+        p1_epochs = mne.read_epochs(str(p1_path), preload=True).crop(tmin=tmin, tmax=tmax)
+        p2_epochs = mne.read_epochs(str(p2_path), preload=True).crop(tmin=tmin, tmax=tmax)
 
     p1_epochs.pick("eeg")
     p2_epochs.pick("eeg")
 
-    common_channels = [name for name in p1_epochs.ch_names if name in set(p2_epochs.ch_names)]
+    p2_channel_set = set(p2_epochs.ch_names)
+    common_channels = [
+        name
+        for name in p1_epochs.ch_names
+        if name in p2_channel_set and str(name).upper().startswith(("A", "B"))
+    ]
     if not common_channels:
-        raise RuntimeError(f"No common EEG channels for sub-{subject_id}")
+        raise RuntimeError(f"No common EEG channels with A/B prefix for sub-{subject_id}")
 
     p1_epochs = p1_epochs.copy().pick(common_channels)
     p2_epochs = p2_epochs.copy().pick(common_channels)
@@ -127,8 +198,20 @@ def _load_pair_decision_epochs(subject_id: str, tmin: float, tmax: float) -> tup
 
 
 def _compute_phase_data(data: np.ndarray, sfreq: float, fmin: float, fmax: float) -> np.ndarray:
+    """
+    Converts time-series EEG data to unit phasors in a narrow frequency band.
+
+    Args:
+        data (np.ndarray): EEG data (trials, channels, times).
+        sfreq (float): Sampling frequency in Hz.
+        fmin (float): Band-pass lower edge in Hz.
+        fmax (float): Band-pass upper edge in Hz.
+
+    Returns:
+        np.ndarray: Complex unit phasors for phase-locking computation.
+    """
     # Narrowband filtering followed by analytic normalization gives unit phasors in the chosen band.
-    filtered = filter_data(data, sfreq=sfreq, l_freq=fmin, h_freq=fmax, verbose=False)
+    filtered = filter_data(data, sfreq=sfreq, l_freq=fmin, h_freq=fmax)
     analytic = hilbert(filtered, axis=-1)
     amplitude = np.abs(analytic)
     amplitude[amplitude == 0.0] = 1.0
@@ -136,6 +219,16 @@ def _compute_phase_data(data: np.ndarray, sfreq: float, fmin: float, fmax: float
 
 
 def _trial_channel_plv(phase_a: np.ndarray, phase_b: np.ndarray) -> np.ndarray:
+    """
+    Computes trial-wise PLV per channel between two phase tensors.
+
+    Args:
+        phase_a (np.ndarray): Unit phasors for participant A.
+        phase_b (np.ndarray): Unit phasors for participant B.
+
+    Returns:
+        np.ndarray: PLV values with shape (trials, channels).
+    """
     return np.abs(np.mean(phase_a * np.conj(phase_b), axis=-1))
 
 
@@ -146,6 +239,21 @@ def _compute_shuffle_stats(
     random_state: int,
     batch_size: int = 8,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Computes shuffled-trial PLV baseline statistics.
+
+    Args:
+        phase_1 (np.ndarray): Unit phasors for participant 1.
+        phase_2 (np.ndarray): Unit phasors for participant 2.
+        n_shuffles (int): Number of trial-shuffle permutations.
+        random_state (int): Random seed.
+        batch_size (int): Number of permutations processed per batch.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]:
+            - Mean shuffled PLV per channel.
+            - Global shuffled PLV distribution.
+    """
     rng = np.random.default_rng(seed=random_state)
     n_trials = phase_2.shape[0]
     n_channels = phase_2.shape[1]
@@ -179,6 +287,24 @@ def _summarize_subject(
     n_shuffles: int,
     random_state: int,
 ) -> tuple[list[dict], dict, mne.Info]:
+    """
+    Computes real and shuffled interbrain PLV summary for one subject pair.
+
+    Args:
+        subject_id (str): Subject identifier.
+        tmin (float): Analysis-window start in seconds.
+        tmax (float): Analysis-window end in seconds.
+        fmin (float): Band-pass lower edge in Hz.
+        fmax (float): Band-pass upper edge in Hz.
+        n_shuffles (int): Number of shuffled controls.
+        random_state (int): Random seed.
+
+    Returns:
+        tuple[list[dict], dict, mne.Info]:
+            - Per-channel PLV rows.
+            - Subject-level global summary.
+            - Info object for plotting.
+    """
     p1_epochs, p2_epochs = _load_pair_decision_epochs(subject_id=subject_id, tmin=tmin, tmax=tmax)
     x1 = p1_epochs.get_data(copy=True)
     x2 = p2_epochs.get_data(copy=True)
@@ -239,6 +365,15 @@ def _summarize_subject(
 
 
 def _group_channel_rows(channel_rows: list[dict]) -> list[dict]:
+    """
+    Aggregates channel-level PLV metrics across subjects.
+
+    Args:
+        channel_rows (list[dict]): Per-subject channel rows.
+
+    Returns:
+        list[dict]: Group-mean channel metrics.
+    """
     grouped: dict[str, dict] = {}
     for row in channel_rows:
         channel = str(row["channel"])
@@ -268,6 +403,7 @@ def _group_channel_rows(channel_rows: list[dict]) -> list[dict]:
 
 
 def _write_csv(path: Path, rows: list[dict], fieldnames: list[str]) -> None:
+    """Writes a list of dictionaries to CSV with fixed field order."""
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
@@ -276,6 +412,7 @@ def _write_csv(path: Path, rows: list[dict], fieldnames: list[str]) -> None:
 
 
 def _save_subject_global_plot(subject_rows: list[dict], out_dir: Path, band_name: str) -> Path:
+    """Saves per-subject global PLV plot comparing real and shuffled values."""
     rows = sorted(subject_rows, key=lambda row: str(row["subject"]))
     x = np.arange(len(rows), dtype=float)
     real = np.asarray([float(row["global_plv_real"]) for row in rows], dtype=float)
@@ -310,6 +447,7 @@ def _plot_topomap_panel(
     cmap: str,
     vlim: tuple[float, float],
 ):
+    """Plots one topomap panel with robust sphere fallback."""
     try:
         image, _ = mne.viz.plot_topomap(
             values,
@@ -336,6 +474,7 @@ def _plot_topomap_panel(
 
 
 def _save_topomap_triplet(rows: list[dict], plot_info: mne.Info, title: str, out_path: Path) -> Path:
+    """Saves a three-panel topomap figure: real, shuffled, and delta PLV."""
     rows = sorted(rows, key=lambda row: str(row["channel"]))
     real = np.asarray([float(row["plv_real"]) for row in rows], dtype=float)
     shuf = np.asarray([float(row["plv_shuffle_mean"]) for row in rows], dtype=float)
@@ -379,6 +518,7 @@ def _save_topomap_triplet(rows: list[dict], plot_info: mne.Info, title: str, out
 
 
 def _save_group_topomap(group_channel_rows: list[dict], plot_info: mne.Info, out_dir: Path, band_name: str) -> Path:
+    """Saves group-level interbrain synchrony topomap triplet."""
     out_path = out_dir / f"interbrain_synchrony_group_topomaps_{band_name}.png"
     return _save_topomap_triplet(
         rows=group_channel_rows,
@@ -395,6 +535,7 @@ def _save_subject_topomap(
     out_dir: Path,
     band_name: str,
 ) -> Path:
+    """Saves subject-level interbrain synchrony topomap triplet."""
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"sub-{subject_id}_interbrain_synchrony_topomaps_{band_name}.png"
     return _save_topomap_triplet(
@@ -406,6 +547,7 @@ def _save_subject_topomap(
 
 
 def _save_zscore_plot(subject_rows: list[dict], out_dir: Path, band_name: str) -> Path:
+    """Saves per-subject global PLV z-score bar chart for one band."""
     rows = sorted(subject_rows, key=lambda row: str(row["subject"]))
     z = np.asarray([float(row["global_plv_z"]) for row in rows], dtype=float)
 
@@ -426,7 +568,11 @@ def _save_zscore_plot(subject_rows: list[dict], out_dir: Path, band_name: str) -
 
 
 def _save_combined_zscore_plot(all_subject_rows: list[dict], out_dir: Path) -> Path:
-    """Combined z-score plot across all bands to compare effect sizes."""
+    """
+    Saves a multi-panel z-score overview across all frequency bands.
+
+    Gold borders highlight subjects with permutation p < 0.05.
+    """
     band_colors = {"theta": "#FF6B6B", "alpha": "#4ECDC4", "beta": "#45B7D1"}
     
     bands_present = sorted(set(row.get("band", "unknown") for row in all_subject_rows))
@@ -489,7 +635,7 @@ def _save_combined_zscore_plot(all_subject_rows: list[dict], out_dir: Path) -> P
 
 
 def _save_band_aggregate_plot(group_summaries: list[dict], out_dir: Path) -> Path:
-    """Save a single-bar-per-band plot using the aggregated z-score across subjects."""
+    """Saves one aggregated z-score bar per frequency band."""
     preferred_order = {"theta": 0, "alpha": 1, "beta": 2}
     ordered = sorted(
         group_summaries,
@@ -524,6 +670,7 @@ def _save_band_aggregate_plot(group_summaries: list[dict], out_dir: Path) -> Pat
 
 
 def _prepare_topomap_info(info: mne.Info) -> mne.Info:
+    """Prepares EEG-only info and ensures valid sensor geometry for topomaps."""
     info_plot = info.copy()
     eeg_picks = mne.pick_types(info_plot, eeg=True, exclude=[])
     if len(eeg_picks) == 0:
@@ -548,49 +695,82 @@ def run_interbrain_synchrony(
     band_name: str,
     subject_topomap_dir: Path | None = None,
 ) -> tuple[list[dict], list[dict], dict, list[dict], mne.Info, list[Path]]:
+    """
+    Runs interbrain synchrony analysis for one frequency band.
+
+    Args:
+        subjects (list[str]): Subject IDs to process.
+        tmin (float): Analysis-window start in seconds.
+        tmax (float): Analysis-window end in seconds.
+        fmin (float): Band-pass lower edge in Hz.
+        fmax (float): Band-pass upper edge in Hz.
+        n_shuffles (int): Number of shuffled controls.
+        random_state (int): Random seed.
+        band_name (str): Frequency-band label for reporting.
+        subject_topomap_dir (Path | None): Optional output dir for subject topomaps.
+
+    Returns:
+        tuple[list[dict], list[dict], dict, list[dict], mne.Info, list[Path]]:
+            - All per-subject channel rows.
+            - Subject summaries.
+            - Group summary for this band.
+            - Group channel averages.
+            - Plot info for topomaps.
+            - Saved subject topomap paths.
+    """
     all_channel_rows: list[dict] = []
     subject_summaries: list[dict] = []
     subject_topomap_paths: list[Path] = []
     representative_info: mne.Info | None = None
 
-    for subject_id in subjects:
-        try:
-            channel_rows, summary, info = _summarize_subject(
-                subject_id=subject_id,
-                tmin=tmin,
-                tmax=tmax,
-                fmin=fmin,
-                fmax=fmax,
-                n_shuffles=n_shuffles,
-                random_state=random_state,
-            )
-            all_channel_rows.extend(channel_rows)
-            subject_summaries.append(summary)
-            if representative_info is None:
-                representative_info = info
+    with Live(progress, console=console, refresh_per_second=1) as live:
+        task_id = progress.add_task(f"Interbrain synchrony ({band_name})", total=len(subjects))
 
-            if subject_topomap_dir is not None:
-                ordered_channels = [str(row["channel"]) for row in channel_rows]
-                picks = mne.pick_channels(info["ch_names"], include=ordered_channels, ordered=True)
-                subject_plot_info = mne.pick_info(info.copy(), picks)
-                subject_plot_info = _prepare_topomap_info(subject_plot_info)
-                subject_topomap_paths.append(
-                    _save_subject_topomap(
-                        subject_id=subject_id,
-                        subject_channel_rows=channel_rows,
-                        plot_info=subject_plot_info,
-                        out_dir=subject_topomap_dir,
-                        band_name=band_name,
-                    )
+        for subject_id in subjects:
+            try:
+                progress.update(task_id, description=f"{band_name}: sub-{subject_id}")
+                live.refresh()
+
+                channel_rows, summary, info = _summarize_subject(
+                    subject_id=subject_id,
+                    tmin=tmin,
+                    tmax=tmax,
+                    fmin=fmin,
+                    fmax=fmax,
+                    n_shuffles=n_shuffles,
+                    random_state=random_state,
                 )
+                all_channel_rows.extend(channel_rows)
+                subject_summaries.append(summary)
+                if representative_info is None:
+                    representative_info = info
 
-            print(
-                f"sub-{subject_id} [{band_name}]: global PLV real={summary['global_plv_real']:.4f}, "
-                f"shuffle={summary['global_plv_shuffle_mean']:.4f}, "
-                f"z={summary['global_plv_z']:.3f}, p={summary['global_plv_perm_p']:.4f}"
-            )
-        except Exception as exc:
-            print(f"sub-{subject_id}: skipped ({exc})")
+                if subject_topomap_dir is not None:
+                    ordered_channels = [str(row["channel"]) for row in channel_rows]
+                    picks = mne.pick_channels(info["ch_names"], include=ordered_channels, ordered=True)
+                    subject_plot_info = mne.pick_info(info.copy(), picks)
+                    subject_plot_info = _prepare_topomap_info(subject_plot_info)
+                    subject_topomap_paths.append(
+                        _save_subject_topomap(
+                            subject_id=subject_id,
+                            subject_channel_rows=channel_rows,
+                            plot_info=subject_plot_info,
+                            out_dir=subject_topomap_dir,
+                            band_name=band_name,
+                        )
+                    )
+
+                console.print(
+                    f"[green]✓[/green] sub-{subject_id} [{band_name}]: "
+                    f"real={summary['global_plv_real']:.4f}, "
+                    f"shuffle={summary['global_plv_shuffle_mean']:.4f}, "
+                    f"z={summary['global_plv_z']:.3f}, p={summary['global_plv_perm_p']:.4f}"
+                )
+            except Exception as exc:
+                console.print(f"[yellow]⚠[/yellow] sub-{subject_id} [{band_name}]: skipped ({exc})")
+
+            progress.advance(task_id)
+            live.refresh()
 
     if not all_channel_rows or representative_info is None:
         raise RuntimeError("No valid interbrain synchrony results were produced.")
@@ -640,6 +820,14 @@ def run_interbrain_synchrony(
 
 
 def main() -> None:
+    """
+    CLI entry point for interbrain synchrony analysis and plotting.
+
+    Returns:
+        None
+    """
+    mne.set_config("MNE_LOGGING_LEVEL", "ERROR")
+
     parser = argparse.ArgumentParser(
         description=(
             "Compute interbrain phase-locking value (PLV) between P1 and P2 during decision phase, "
@@ -784,9 +972,9 @@ def main() -> None:
         ],
     )
 
-    print("\n=== Interbrain Synchrony Summary ===")
+    console.print("\n=== Interbrain Synchrony Summary ===")
     for summary in group_summaries:
-        print(
+        console.print(
             f"[{summary['band']}] N={summary['n_subjects']} | "
             f"PLV real={summary['mean_global_plv_real']:.4f}, "
             f"shuffle={summary['mean_global_plv_shuffle']:.4f}, "
@@ -795,24 +983,24 @@ def main() -> None:
             f"FDR p<0.05={summary['subjects_with_perm_p_fdr_lt_0_05']}"
         )
 
-    print(f"Saved channel values: {channel_path}")
-    print(f"Saved subject summary: {subject_path}")
-    print(f"Saved group summary: {group_path}")
-    print(f"Saved band aggregates: {band_aggregate_path}")
-    print("Saved subject plots:")
+    console.print(f"Saved channel values: {channel_path}")
+    console.print(f"Saved subject summary: {subject_path}")
+    console.print(f"Saved group summary: {group_path}")
+    console.print(f"Saved band aggregates: {band_aggregate_path}")
+    console.print("Saved subject plots:")
     for path in subject_plot_paths:
-        print(f"  - {path}")
-    print("Saved topomap plots:")
+        console.print(f"  - {path}")
+    console.print("Saved topomap plots:")
     for path in topomap_plot_paths:
-        print(f"  - {path}")
-    print("Saved subject topomap plots:")
+        console.print(f"  - {path}")
+    console.print("Saved subject topomap plots:")
     for path in subject_topomap_paths:
-        print(f"  - {path}")
-    print("Saved z-score plots:")
+        console.print(f"  - {path}")
+    console.print("Saved z-score plots:")
     for path in zscore_plot_paths:
-        print(f"  - {path}")
-    print(f"Saved combined z-score plot: {combined_zscore_plot_path}")
-    print(f"Saved band aggregate plot: {aggregate_band_plot_path}")
+        console.print(f"  - {path}")
+    console.print(f"Saved combined z-score plot: {combined_zscore_plot_path}")
+    console.print(f"Saved band aggregate plot: {aggregate_band_plot_path}")
 
 
 if __name__ == "__main__":
