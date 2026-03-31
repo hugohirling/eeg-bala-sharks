@@ -156,7 +156,7 @@ def plot_psd_comparison(raw_before, raw_after, subject_id, person, duration, out
 
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_filter_psd_comparison.png", dpi=150)
     plt.close(fig)
-    print(f"  âœ“ PSD comparison saved: {plot_path.name}")
+    print(f"  OK PSD comparison saved: {plot_path.name}")
 
 
 def plot_timeseries_comparison(raw_before, raw_after, subject_id, person, duration, output_dir):
@@ -183,18 +183,18 @@ def plot_timeseries_comparison(raw_before, raw_after, subject_id, person, durati
     fig, axes = plt.subplots(3, 1, figsize=(14, 8.5), sharex=True)
     axes[0].plot(times_before, data_before, color=COLOR_BEFORE, linewidth=0.9)
     axes[0].set_title(f"Before filter ({channel_name})", fontsize=11, fontweight="bold")
-    axes[0].set_ylabel("Centered ÂµV")
+    axes[0].set_ylabel("Centered uV")
     axes[0].grid(alpha=0.28, linestyle=":")
 
     axes[1].plot(times_after, data_after, color=COLOR_AFTER, linewidth=0.9)
     axes[1].set_title(f"After filter ({channel_name})", fontsize=11, fontweight="bold")
-    axes[1].set_ylabel("Centered ÂµV")
+    axes[1].set_ylabel("Centered uV")
     axes[1].grid(alpha=0.28, linestyle=":")
 
     axes[2].plot(times_after[:n_common], delta_uv, color=COLOR_DELTA, linewidth=0.9)
     axes[2].axhline(0.0, color=VIZ_NEUTRAL["line_soft"], linestyle="--", linewidth=1.0)
     axes[2].set_title("Difference introduced by filter (after - before)", fontsize=11, fontweight="bold")
-    axes[2].set_ylabel("Delta ÂµV")
+    axes[2].set_ylabel("Delta uV")
     axes[2].set_xlabel("Time (s)")
     axes[2].grid(alpha=0.28, linestyle=":")
 
@@ -203,8 +203,8 @@ def plot_timeseries_comparison(raw_before, raw_after, subject_id, person, durati
     delta_std = float(np.std(delta_uv))
     fig.suptitle(
         f"sub-{subject_id} {person} - Time-Domain Filter Check\n"
-        f"Representative channel {channel_name} | std before={before_std:.2f} ÂµV | "
-        f"std after={after_std:.2f} ÂµV | std delta={delta_std:.2f} ÂµV",
+        f"Representative channel {channel_name} | std before={before_std:.2f} uV | "
+        f"std after={after_std:.2f} uV | std delta={delta_std:.2f} uV",
         fontsize=13,
         fontweight="bold",
     )
@@ -212,7 +212,7 @@ def plot_timeseries_comparison(raw_before, raw_after, subject_id, person, durati
 
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_filter_timeseries_comparison.png", dpi=150)
     plt.close(fig)
-    print(f"  âœ“ Time series comparison saved: {plot_path.name}")
+    print(f"  OK Time series comparison saved: {plot_path.name}")
 
 
 def plot_bandpower_summary(raw_before, raw_after, subject_id, person, duration, output_dir):
@@ -263,5 +263,5 @@ def plot_bandpower_summary(raw_before, raw_after, subject_id, person, duration, 
 
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_filter_bandpower_summary.png", dpi=150)
     plt.close(fig)
-    print(f"  âœ“ Bandpower summary saved: {plot_path.name}")
+    print(f"  OK Bandpower summary saved: {plot_path.name}")
 

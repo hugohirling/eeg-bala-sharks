@@ -2,7 +2,7 @@
 Sanity Check Plot Module for Step 02: Rename & Set Montage
 
 Creates comparison plots for channel renaming and montage setup:
-- Channel name mapping (before: BioSemi â†’ after: 10-20 system)
+- Channel name mapping (before: BioSemi -> after: 10-20 system)
 - 2D topomap visualization of electrode positions
 - 3D visualization of electrode coordinates (from montage)
 - Montage quality and consistency checks
@@ -66,7 +66,7 @@ def plot_montage_topomap(raw, subject_id, person, output_dir):
 
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_montage_topomap.png", dpi=150)
     plt.close(fig)
-    print(f"  âœ“ Montage topomap saved: {plot_path.name}")
+    print(f"  OK Montage topomap saved: {plot_path.name}")
 
 
 def plot_montage_3d(raw, subject_id, person, output_dir):
@@ -112,7 +112,7 @@ def plot_montage_3d(raw, subject_id, person, output_dir):
         pad_inches=0.25,
     )
     plt.close(fig)
-    print(f"  âœ“ 3D montage plot saved: {plot_path.name}")
+    print(f"  OK 3D montage plot saved: {plot_path.name}")
 
 
 def plot_channel_naming_summary(raw_before, raw_after, subject_id, person, output_dir):
@@ -159,7 +159,7 @@ def plot_channel_naming_summary(raw_before, raw_after, subject_id, person, outpu
 
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_montage_channel_mapping.png", dpi=100)
     plt.close(fig)
-    print(f"  âœ“ Channel mapping summary saved: {plot_path.name}")
+    print(f"  OK Channel mapping summary saved: {plot_path.name}")
 
 
 def plot_montage_coverage_stats(raw_before, raw_after, subject_id, person, output_dir):
@@ -199,15 +199,15 @@ def plot_montage_coverage_stats(raw_before, raw_after, subject_id, person, outpu
     # Montage information
     montage_info = ["Montage Information", ""]
     if has_montage:
-        montage_info.append(f"âœ“ Electrode positions available: {len(raw_after.info['dig'])}")
-        montage_info.append(f"âœ“ Montage applied: {montage_name}")
+        montage_info.append(f"OK Electrode positions available: {len(raw_after.info['dig'])}")
+        montage_info.append(f"OK Montage applied: {montage_name}")
     else:
-        montage_info.append("âœ— No electrode positions")
+        montage_info.append("FAIL No electrode positions")
     
     montage_info.extend([
-        f"âœ“ Total channels: {len(raw_after.ch_names)}",
-        f"âœ“ EEG channels: {len(eeg_picks_after)}",
-        f"âœ“ Renamed EEG labels: {recognized_renamed}/{len(names_after)}",
+        f"OK Total channels: {len(raw_after.ch_names)}",
+        f"OK EEG channels: {len(eeg_picks_after)}",
+        f"OK Renamed EEG labels: {recognized_renamed}/{len(names_after)}",
     ])
 
     check_labels = [
@@ -255,7 +255,7 @@ def plot_montage_coverage_stats(raw_before, raw_after, subject_id, person, outpu
 
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_montage_coverage_stats.png", dpi=100)
     plt.close(fig)
-    print(f"  âœ“ Montage coverage stats saved: {plot_path.name}")
+    print(f"  OK Montage coverage stats saved: {plot_path.name}")
 
 
 def main(argv=None):
@@ -299,7 +299,7 @@ def main(argv=None):
                 print(f"  {person}: Error: {e}")
 
     print("\n" + "=" * 80)
-    print(f"âœ“ All visualizations saved to: {output_dir}")
+    print(f"OK All visualizations saved to: {output_dir}")
     print("=" * 80 + "\n")
 
 

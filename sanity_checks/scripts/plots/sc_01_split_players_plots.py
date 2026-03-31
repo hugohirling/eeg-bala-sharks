@@ -121,7 +121,7 @@ def plot_data_summary_per_player(subject_id, output_dir):
 
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_split_players_data_summary.png", dpi=100)
     plt.close(fig)
-    print(f"  âœ“ Data summary plot saved: {plot_path.name}")
+    print(f"  OK Data summary plot saved: {plot_path.name}")
 
 
 def plot_split_integrity_checks(subject_id, output_dir):
@@ -269,7 +269,7 @@ def plot_split_integrity_checks(subject_id, output_dir):
 
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_split_players_validation.png", dpi=120)
     plt.close(fig)
-    print(f"  âœ“ Split validation plot saved: {plot_path.name}")
+    print(f"  OK Split validation plot saved: {plot_path.name}")
 
 
 def main(argv=None):
@@ -302,7 +302,7 @@ def main(argv=None):
         plot_split_integrity_checks(subject_id, output_dir)
 
     print("\n" + "=" * 80)
-    print(f"âœ“ All visualizations saved to: {output_dir}")
+    print(f"OK All visualizations saved to: {output_dir}")
     print("=" * 80 + "\n")
 
 

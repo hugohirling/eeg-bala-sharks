@@ -80,38 +80,38 @@ def plot_timeseries_comparison(raw_orig, raw_downsampled, subject_id, duration, 
     # Create figure with two subplots
     fig, axes = plt.subplots(2, 1, figsize=(14, 8))
 
-    # ORIGINAL: Many samples â€” show ALL points
+    # ORIGINAL: Many samples - show ALL points
     axes[0].plot(times_orig, data_orig[0] * 1e6, color=COLOR_BEFORE, linewidth=1, alpha=0.5, label="Continuous signal")
     axes[0].scatter(times_orig, data_orig[0] * 1e6,
                    s=20, color=COLOR_BEFORE, marker="o", edgecolors=COLOR_BEFORE_EDGE, linewidth=0.5, zorder=3, alpha=0.6)
-    axes[0].set_ylabel("Amplitude (ÂµV)", fontsize=11, fontweight="bold")
-    axes[0].set_title(f"ORIGINAL â€” {raw_orig.info['sfreq']:.0f} Hz sampling rate\n{len(times_orig)} samples in {t_end:.1f}s = {raw_orig.info['sfreq']:.0f} samples/second", 
+    axes[0].set_ylabel("Amplitude (uV)", fontsize=11, fontweight="bold")
+    axes[0].set_title(f"ORIGINAL - {raw_orig.info['sfreq']:.0f} Hz sampling rate\n{len(times_orig)} samples in {t_end:.1f}s = {raw_orig.info['sfreq']:.0f} samples/second", 
                      fontsize=12, fontweight="bold", color=COLOR_BEFORE, pad=10)
     axes[0].set_xlim([0, t_end])
     axes[0].grid(alpha=0.3, linestyle=":")
     axes[0].set_facecolor(FACE_BEFORE)
     axes[0].legend(loc="upper right", fontsize=10)
 
-    # DOWNSAMPLED: Few samples â€” show ALL points
+    # DOWNSAMPLED: Few samples - show ALL points
     axes[1].plot(times_downsampled, data_downsampled[0] * 1e6, color=COLOR_AFTER, linewidth=1, label="Downsampled", zorder=1)
     axes[1].scatter(times_downsampled, data_downsampled[0] * 1e6,
                    s=20, color=COLOR_AFTER, marker="o", edgecolors=COLOR_AFTER_EDGE, linewidth=0.5, zorder=4, alpha=0.8)
     axes[1].set_xlabel("Time (s)", fontsize=11, fontweight="bold")
-    axes[1].set_ylabel("Amplitude (ÂµV)", fontsize=11, fontweight="bold")
-    axes[1].set_title(f"DOWNSAMPLED â€” {raw_downsampled.info['sfreq']:.0f} Hz sampling rate\n{len(times_downsampled)} samples in {t_end:.1f}s = {raw_downsampled.info['sfreq']:.0f} samples/second ({raw_orig.info['sfreq']/raw_downsampled.info['sfreq']:.0f}x reduction)", 
+    axes[1].set_ylabel("Amplitude (uV)", fontsize=11, fontweight="bold")
+    axes[1].set_title(f"DOWNSAMPLED - {raw_downsampled.info['sfreq']:.0f} Hz sampling rate\n{len(times_downsampled)} samples in {t_end:.1f}s = {raw_downsampled.info['sfreq']:.0f} samples/second ({raw_orig.info['sfreq']/raw_downsampled.info['sfreq']:.0f}x reduction)", 
                      fontsize=12, fontweight="bold", color=COLOR_AFTER, pad=10)
     axes[1].set_xlim([0, t_end])
     axes[1].grid(alpha=0.3, linestyle=":")
     axes[1].set_facecolor(FACE_AFTER)
     axes[1].legend(loc="upper right", fontsize=10)
 
-    fig.suptitle(f"sub-{subject_id} {ch_name} â€” Downsampling Effect: {raw_orig.info['sfreq']:.0f} Hz â†’ {raw_downsampled.info['sfreq']:.0f} Hz\n(Top: {len(times_orig)} samples | Bottom: {len(times_downsampled)} samples â€” Clear reduction, signal preserved)", 
+    fig.suptitle(f"sub-{subject_id} {ch_name} - Downsampling Effect: {raw_orig.info['sfreq']:.0f} Hz -> {raw_downsampled.info['sfreq']:.0f} Hz\n(Top: {len(times_orig)} samples | Bottom: {len(times_downsampled)} samples - Clear reduction, signal preserved)", 
                 fontsize=13, fontweight="bold", y=0.995)
     plt.tight_layout()
 
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_downsample_timeseries_comparison.png", dpi=150)
     plt.close(fig)
-    print(f"  âœ“ Time series comparison saved: {plot_path.name}")
+    print(f"  OK Time series comparison saved: {plot_path.name}")
 
 
 def plot_psd_comparison(raw_orig, raw_downsampled, subject_id, duration, output_dir):
@@ -129,7 +129,7 @@ def plot_psd_comparison(raw_orig, raw_downsampled, subject_id, duration, output_
     ax_orig = plt.subplot(1, 2, 1)
     raw_orig_eeg.plot_psd(fmax=shared_fmax, ax=ax_orig, show=False, color=COLOR_BEFORE)
     ax_orig.set_facecolor(FACE_BEFORE)
-    ax_orig.set_title(f"ORIGINAL DATA â€” {raw_orig.info['sfreq']:.0f} Hz\nShown on same 0-{shared_fmax:.0f} Hz scale for comparison",
+    ax_orig.set_title(f"ORIGINAL DATA - {raw_orig.info['sfreq']:.0f} Hz\nShown on same 0-{shared_fmax:.0f} Hz scale for comparison",
                      fontsize=12, fontweight="bold", color=COLOR_BEFORE)
     ax_orig.grid(alpha=0.4, linestyle=":")
     ax_orig.set_xlim(0, shared_fmax)
@@ -142,7 +142,7 @@ def plot_psd_comparison(raw_orig, raw_downsampled, subject_id, duration, output_
     ax_down = plt.subplot(1, 2, 2)
     raw_downsampled_eeg.plot_psd(fmax=shared_fmax, ax=ax_down, show=False, color=COLOR_AFTER)
     ax_down.set_facecolor(FACE_AFTER)
-    ax_down.set_title(f"DOWNSAMPLED DATA â€” {raw_downsampled.info['sfreq']:.0f} Hz\nShown on same 0-{shared_fmax:.0f} Hz scale; cutoff at Nyquist ({nyquist_down:.0f} Hz)",
+    ax_down.set_title(f"DOWNSAMPLED DATA - {raw_downsampled.info['sfreq']:.0f} Hz\nShown on same 0-{shared_fmax:.0f} Hz scale; cutoff at Nyquist ({nyquist_down:.0f} Hz)",
                      fontsize=12, fontweight="bold", color=COLOR_AFTER)
     ax_down.grid(alpha=0.4, linestyle=":")
     ax_down.set_xlim(0, shared_fmax)
@@ -162,7 +162,7 @@ def plot_psd_comparison(raw_orig, raw_downsampled, subject_id, duration, output_
 
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_downsample_psd_comparison.png", dpi=150)
     plt.close(fig)
-    print(f"  âœ“ PSD comparison saved: {plot_path.name}")
+    print(f"  OK PSD comparison saved: {plot_path.name}")
 
 
 def plot_statistics_comparison(raw_orig, raw_downsampled, subject_id, output_dir):
@@ -184,7 +184,7 @@ def plot_statistics_comparison(raw_orig, raw_downsampled, subject_id, output_dir
     ax1 = plt.subplot(1, 3, 1)
     ax1.hist(std_orig, bins=20, alpha=0.6, label="Original", color=COLOR_BEFORE, edgecolor=VIZ_NEUTRAL["black"], linewidth=1.2)
     ax1.hist(std_downsampled, bins=20, alpha=0.6, label="Downsampled", color=COLOR_AFTER, edgecolor=VIZ_NEUTRAL["black"], linewidth=1.2)
-    ax1.set_xlabel("Standard Deviation (ÂµV)", fontsize=11, fontweight="bold")
+    ax1.set_xlabel("Standard Deviation (uV)", fontsize=11, fontweight="bold")
     ax1.set_ylabel("Channel Count", fontsize=11, fontweight="bold")
     ax1.set_title("Amplitude Distribution\n(Should be nearly identical)", fontsize=11, fontweight="bold")
     ax1.legend(fontsize=10)
@@ -199,7 +199,7 @@ def plot_statistics_comparison(raw_orig, raw_downsampled, subject_id, output_dir
     for i in range(0, len(channels), 8):
         ax2.plot([i, i], [std_orig[i], std_downsampled[i]], "k--", alpha=0.2, linewidth=1)
     ax2.set_xlabel("Channel Index", fontsize=11, fontweight="bold")
-    ax2.set_ylabel("Std (ÂµV)", fontsize=11, fontweight="bold")
+    ax2.set_ylabel("Std (uV)", fontsize=11, fontweight="bold")
     ax2.set_title("Per-Channel Amplitude\n(Patterns should match)", fontsize=11, fontweight="bold")
     ax2.legend(fontsize=10)
     ax2.grid(alpha=0.3)
@@ -231,7 +231,7 @@ def plot_statistics_comparison(raw_orig, raw_downsampled, subject_id, output_dir
 
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_downsample_statistics_comparison.png", dpi=150)
     plt.close(fig)
-    print(f"  âœ“ Statistics comparison saved: {plot_path.name}")
+    print(f"  OK Statistics comparison saved: {plot_path.name}")
 
 
 def main(argv=None):
@@ -288,7 +288,7 @@ def main(argv=None):
         plot_statistics_comparison(raw_original, raw_downsampled, subject_id, output_dir)
 
     print("\n" + "=" * 80)
-    print(f"âœ“ All visualizations saved to: {output_dir}")
+    print(f"OK All visualizations saved to: {output_dir}")
     print("=" * 80 + "\n")
 
 

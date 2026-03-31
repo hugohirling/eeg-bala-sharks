@@ -77,7 +77,7 @@ def plot_event_distribution(epochs, subject_id, person, output_dir):
     
     ax.set_xlabel("Event Type", fontsize=12, fontweight="bold")
     ax.set_ylabel("Number of Epochs", fontsize=12, fontweight="bold")
-    ax.set_title(f"sub-{subject_id} {person} â€” Event Distribution\nTotal: {len(epochs)} epochs across {len(event_types)} event types", 
+    ax.set_title(f"sub-{subject_id} {person} - Event Distribution\nTotal: {len(epochs)} epochs across {len(event_types)} event types", 
                  fontsize=13, fontweight="bold", pad=15)
     ax.set_xticks(range(len(event_types)))
     ax.set_xticklabels(event_types, rotation=45, ha='right')
@@ -87,7 +87,7 @@ def plot_event_distribution(epochs, subject_id, person, output_dir):
     fig.tight_layout()
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_epoch_event_distribution.png", dpi=150)
     plt.close(fig)
-    print(f"  âœ“ Event distribution saved: {plot_path.name}")
+    print(f"  OK Event distribution saved: {plot_path.name}")
 
 
 def plot_example_epochs(epochs, subject_id, person, output_dir):
@@ -146,8 +146,8 @@ def plot_example_epochs(epochs, subject_id, person, output_dir):
         # Apply unified y-axis limits
         ax.set_ylim(y_lim)
         
-        ax.set_ylabel("Amplitude (ÂµV)", fontsize=11, fontweight="bold")
-        ax.set_title(f"Example Epoch {idx + 1} â€” {event_label}", 
+        ax.set_ylabel("Amplitude (uV)", fontsize=11, fontweight="bold")
+        ax.set_title(f"Example Epoch {idx + 1} - {event_label}", 
                     fontsize=11, fontweight="bold", color=COLOR_EXAMPLE_TITLE)
         ax.grid(alpha=0.3, linestyle=':')
         ax.set_facecolor(FACE_EXAMPLE)
@@ -156,13 +156,13 @@ def plot_example_epochs(epochs, subject_id, person, output_dir):
             ax.legend(loc='upper right', fontsize=10)
     
     axes[-1].set_xlabel("Time (s)", fontsize=12, fontweight="bold")
-    fig.suptitle(f"sub-{subject_id} {person} â€” Example Epochs\nBaseline: [{baseline_min:.3f}, {baseline_max:.3f}] s | Epoch window: [{times[0]:.3f}, {times[-1]:.3f}] s",
+    fig.suptitle(f"sub-{subject_id} {person} - Example Epochs\nBaseline: [{baseline_min:.3f}, {baseline_max:.3f}] s | Epoch window: [{times[0]:.3f}, {times[-1]:.3f}] s",
                  fontsize=13, fontweight="bold", y=0.995)
     
     fig.tight_layout()
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_epoch_examples.png", dpi=150)
     plt.close(fig)
-    print(f"  âœ“ Example epochs saved: {plot_path.name}")
+    print(f"  OK Example epochs saved: {plot_path.name}")
 
 
 def plot_psd_comparison(raw, epochs, subject_id, person, output_dir):
@@ -180,24 +180,24 @@ def plot_psd_comparison(raw, epochs, subject_id, person, output_dir):
     # BEFORE: Raw continuous data
     raw_eeg.plot_psd(fmax=40, ax=axes[0], show=False, color=COLOR_CONTINUOUS, picks='eeg')
     axes[0].set_facecolor(FACE_CONTINUOUS)
-    axes[0].set_title(f"BEFORE â€” Continuous Raw Data\n{len(raw_eeg.ch_names)} channels, {raw_eeg.times[-1]:.1f}s duration",
+    axes[0].set_title(f"BEFORE - Continuous Raw Data\n{len(raw_eeg.ch_names)} channels, {raw_eeg.times[-1]:.1f}s duration",
                       fontsize=12, fontweight="bold", color=COLOR_CONTINUOUS, pad=10)
     axes[0].grid(alpha=0.4, linestyle=":")
     
     # AFTER: Epoched data
     epochs_eeg.plot_psd(fmax=40, ax=axes[1], show=False, color=COLOR_EPOCHED, picks='eeg')
     axes[1].set_facecolor(FACE_EPOCHED)
-    axes[1].set_title(f"AFTER â€” Epoched Data\n{len(epochs_eeg)} epochs Ã— {len(epochs_eeg.ch_names)} channels",
+    axes[1].set_title(f"AFTER - Epoched Data\n{len(epochs_eeg)} epochs Ã— {len(epochs_eeg.ch_names)} channels",
                       fontsize=12, fontweight="bold", color=COLOR_EPOCHED, pad=10)
     axes[1].grid(alpha=0.4, linestyle=":")
     
-    fig.suptitle(f"sub-{subject_id} {person} â€” PSD Comparison: Epoching Effect",
+    fig.suptitle(f"sub-{subject_id} {person} - PSD Comparison: Epoching Effect",
                  fontsize=13, fontweight="bold", y=0.98)
     
     plt.subplots_adjust(left=0.1, right=0.95, top=0.92, bottom=0.1)
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_epoch_psd_comparison.png", dpi=150)
     plt.close(fig)
-    print(f"  âœ“ PSD comparison saved: {plot_path.name}")
+    print(f"  OK PSD comparison saved: {plot_path.name}")
 
 
 def plot_epoch_statistics(epochs, subject_id, person, output_dir):
@@ -227,18 +227,18 @@ def plot_epoch_statistics(epochs, subject_id, person, output_dir):
     
     # Prepare text content
     stats_text = f"""
-EPOCH STATISTICS â€” sub-{subject_id} {person}
+EPOCH STATISTICS - sub-{subject_id} {person}
 
 DIMENSIONS:
-  â€¢ Total epochs: {n_epochs}
-  â€¢ Channels: {n_channels}
-  â€¢ Samples per epoch: {n_samples_per_epoch}
-  â€¢ Sampling rate: {sfreq:.0f} Hz
+  - Total epochs: {n_epochs}
+  - Channels: {n_channels}
+  - Samples per epoch: {n_samples_per_epoch}
+  - Sampling rate: {sfreq:.0f} Hz
   
 TEMPORAL WINDOW:
-  â€¢ Epoch range: [{tmin:.3f}, {tmax:.3f}] s
-  â€¢ Epoch duration: {epoch_duration:.3f} s
-  â€¢ Baseline window: [{baseline[0]:.3f}, {baseline[1]:.3f}] s
+  - Epoch range: [{tmin:.3f}, {tmax:.3f}] s
+  - Epoch duration: {epoch_duration:.3f} s
+  - Baseline window: [{baseline[0]:.3f}, {baseline[1]:.3f}] s
   
 EVENT DISTRIBUTION:
 """
@@ -246,12 +246,12 @@ EVENT DISTRIBUTION:
     for et in event_types:
         count = event_counts[et]
         pct = (count / n_epochs * 100) if n_epochs > 0 else 0
-        stats_text += f"  â€¢ {et}: {count} epochs ({pct:.1f}%)\n"
+        stats_text += f"  - {et}: {count} epochs ({pct:.1f}%)\n"
     
     stats_text += f"""
 DATA QUALITY:
-  â€¢ Bad channels marked: {len(bads)}/{n_channels} ({bad_pct:.1f}%)
-  â€¢ Data integrity: OK (no NaN/Inf)
+  - Bad channels marked: {len(bads)}/{n_channels} ({bad_pct:.1f}%)
+  - Data integrity: OK (no NaN/Inf)
 """
     
     # Display with monospace font for alignment
@@ -259,13 +259,13 @@ DATA QUALITY:
             fontsize=11, verticalalignment='top', fontfamily='monospace',
             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
     
-    fig.suptitle(f"sub-{subject_id} {person} â€” Epoching: Metadata Summary",
+    fig.suptitle(f"sub-{subject_id} {person} - Epoching: Metadata Summary",
                  fontsize=13, fontweight="bold", y=0.98)
     
     fig.tight_layout()
     plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_epoch_statistics.png", dpi=150)
     plt.close(fig)
-    print(f"  âœ“ Statistics summary saved: {plot_path.name}")
+    print(f"  OK Statistics summary saved: {plot_path.name}")
 
 
 def process_subject(subject_id):
@@ -278,14 +278,14 @@ def process_subject(subject_id):
         epoch_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_epoch.fif"
         
         if not raw_path.exists() or not epoch_path.exists():
-            print(f"    âš  Skipping: Missing input/output files")
+            print(f"    WARN Skipping: Missing input/output files")
             continue
         
         try:
             raw = mne.io.read_raw_fif(str(raw_path), preload=True, verbose=False)
             epochs = mne.read_epochs(str(epoch_path), preload=True, verbose=False)
         except Exception as e:
-            print(f"    âœ— Error loading files: {e}")
+            print(f"    FAIL Error loading files: {e}")
             continue
         
         # Generate visualizations
@@ -301,7 +301,7 @@ def main(argv=None):
     subjects = resolve_subjects(args.subjects, config.SUBJECTS, mode="viz")
     
     print(f"\n{'='*70}")
-    print(f"  Sanity Check: Step 07 â€” Epoching Visualizations")
+    print(f"  Sanity Check: Step 07 - Epoching Visualizations")
     print(f"  Generating before/after comparison plots...")
     print(f"{'='*70}\n")
     
@@ -309,7 +309,7 @@ def main(argv=None):
         process_subject(subject_id)
     
     print(f"\n{'='*70}")
-    print(f"  âœ“ All visualizations generated successfully!")
+    print(f"  OK All visualizations generated successfully!")
     print(f"  Output directory: {config.QC_DIR}")
     print(f"{'='*70}\n")
 
