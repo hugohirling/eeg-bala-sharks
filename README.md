@@ -17,6 +17,7 @@ To ensure seamless reproducibility across different hardware environments, we ha
    ```bash
    pip install -r requirements.txt
 
+```
 eeg-bala-sharks/
 ├─ eeg_pipeline/         # Core Python scripts (preprocessing, PLV, encoding/decoding)
 ├─ sanity_checks/        # Jupyter notebooks dedicated to visual diagnostic sanity checks
@@ -26,6 +27,7 @@ eeg-bala-sharks/
 ├─ output                # Output files
 ├─ paths.py                # File to provide paths to input/output
 └─ README.md             # Project documentation
+```
 
 ## Abstracted Preprocessing Pipeline
 To mitigate memory bottlenecks and ensure data quality, our preprocessing pipeline executes the following sequential logic:
