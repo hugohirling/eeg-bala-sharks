@@ -366,7 +366,7 @@ def _save_timecourse_plot(timecourse_df: pd.DataFrame, summary: dict, out_dir: P
         rotation=45,
         ha="right",
     )
-    ax.set_ylim(max(0.0, float(np.min(y - yerr)) - 0.03), max(0.45, float(np.max(y + yerr)) + 0.03))
+    ax.set_ylim(max(0.2, float(np.min(y - yerr)) - 0.03), max(0.38, float(np.max(y + yerr)) + 0.03))
     ax.grid(axis="y", alpha=0.25)
     ax.legend()
     fig.tight_layout()
@@ -413,7 +413,7 @@ def _save_timecourse_plot_by_person(
         rotation=45,
         ha="right",
     )
-    ax.set_ylim(max(0.0, float(np.min(y - yerr)) - 0.03), max(0.45, float(np.max(y + yerr)) + 0.03))
+    ax.set_ylim(max(0.2, float(np.min(y - yerr)) - 0.03), max(0.38, float(np.max(y + yerr)) + 0.03))
     ax.grid(axis="y", alpha=0.25)
     ax.legend()
     fig.tight_layout()
