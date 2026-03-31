@@ -25,7 +25,21 @@ if str(PIPELINE_DIR) not in sys.path:
 
 from preprocessing import config
 
-# Set up Rich console and progress bar
+from _rps_decoding_utils import (
+    PHASE_SPECS,
+    RESP_CODE_TO_NAME,
+    TARGET_CHOICES,
+    TARGET_DISPLAY_NAMES,
+    build_target_labels,
+    get_phase_bin_windows,
+    load_events_df,
+    load_phase_features,
+    match_status,
+    resolve_csv_argument,
+    resolve_subjects,
+    target_output_dir,
+)
+
 console = Console()
 progress = Progress(
     TextColumn("[progress.description]{task.description}"),
@@ -40,343 +54,206 @@ progress = Progress(
     refresh_per_second=10,
 )
 
-RESP_CODE_TO_NAME = {1: "rock", 2: "paper", 3: "scissors"}
 
-
-def _get_decision_bin_windows(n_bins: int = 8) -> tuple[list[float], list[float], list[float]]:
-    bin_starts = [0.25 * index for index in range(n_bins)]
-    bin_ends = [start + 0.25 for start in bin_starts]
-    bin_centers = [(start + end) / 2.0 for start, end in zip(bin_starts, bin_ends)]
-    return bin_starts, bin_ends, bin_centers
-
-def _get_response_bin_windows(n_bins: int = 8) -> tuple[list[float], list[float], list[float]]:
-    bin_starts = [0.25 * index for index in range(n_bins)]
-    bin_ends = [start + 0.25 for start in bin_starts]
-    bin_centers = [(start + end) / 2.0 for start, end in zip(bin_starts, bin_ends)]
-    return bin_starts, bin_ends, bin_centers
-
-def _get_feedback_bin_windows(n_bins: int = 4) -> tuple[list[float], list[float], list[float]]:
-    bin_starts = [0.25 * index for index in range(n_bins)]
-    bin_ends = [start + 0.25 for start in bin_starts]
-    bin_centers = [(start + end) / 2.0 for start, end in zip(bin_starts, bin_ends)]
-    return bin_starts, bin_ends, bin_centers
-
-
-def _resolve_subjects(subjects_arg: str | None) -> list[str]:
-    if subjects_arg:
-        return [part.strip() for part in subjects_arg.split(",") if part.strip()]
-    print(list(config.SUBJECTS))
-    return list(config.SUBJECTS)
-
-
-def _get_events_tsv_path(subject_id: str) -> Path:
-    return (
-        Path(config.BIDS_ROOT)
-        / f"sub-{subject_id}"
-        / "eeg"
-        / f"sub-{subject_id}_task-RPS_events.tsv"
-    )
-
-
-def _get_epoch_path(subject_id: str, person: str) -> Path:
-    return Path(config.OUTPUT_DIR) / f"sub-{subject_id}_{person}_epoch.fif"
-
-
-def _player_response_column(person: str) -> str:
-    prefix = config.PLAYER_PREFIX_MAP[person]
-    # In this dataset, P1/P2 EEG streams map to prefixes "2-"/"1-".
-    # This tells us which behavioral player column to decode.
-    if prefix.startswith("1"):
-        return "player1_resp"
-    if prefix.startswith("2"):
-        return "player2_resp"
-    raise ValueError(f"Unexpected player prefix for {person}: {prefix}")
-
-
-def _load_labels(subject_id: str, person: str) -> np.ndarray:
-    events_path = _get_events_tsv_path(subject_id)
-    if not events_path.exists():
-        raise FileNotFoundError(f"Missing events file: {events_path}")
-
-    events_df = pd.read_csv(events_path, sep="\t")
-    response_col = _player_response_column(person)
-    if response_col not in events_df.columns:
-        raise ValueError(f"Column '{response_col}' not found in {events_path}")
-
-    return events_df[response_col].to_numpy(dtype=int)
-
-def _load_features(subject_id: str, person: str) -> np.ndarray:
-    epoch_path = _get_epoch_path(subject_id, person)
-    if not epoch_path.exists():
-        raise FileNotFoundError(f"Missing epoch file: {epoch_path}")
-    
-    epochs = mne.read_epochs(str(epoch_path), preload=True) 
-    decision_epochs = epochs.copy().crop(tmin=0.0, tmax=2.0)
-    decision_epochs.pick("eeg")
-    response_epochs = epochs.copy().crop(tmin=2.0, tmax=4.0)
-    response_epochs.pick("eeg")
-    feedback_epochs = epochs.copy().crop(tmin=4.0, tmax=5.0)
-    feedback_epochs.pick("eeg")
-    return {
-        "decision": decision_epochs.get_data(copy=True),
-        "response": response_epochs.get_data(copy=True),
-        "feedback": feedback_epochs.get_data(copy=True),
-    }
-
-def _load_decision_features(subject_id: str, person: str) -> np.ndarray:
-    epoch_path = _get_epoch_path(subject_id, person)
-    if not epoch_path.exists():
-        raise FileNotFoundError(f"Missing epoch file: {epoch_path}")
-
-    epochs = mne.read_epochs(str(epoch_path), preload=True)
-
-    # Decision phase from paper: 2 s after decision screen onset.
-    # We decode 0-2 s to focus on decision formation and avoid pre-onset baseline.
-    decision_epochs = epochs.copy().crop(tmin=0.0, tmax=2.0)
-    decision_epochs.pick("eeg")
-
-    return decision_epochs.get_data(copy=True)
-
-def _load_response_features(subject_id: str, person: str) -> np.ndarray:
-    epoch_path = _get_epoch_path(subject_id, person)
-    if not epoch_path.exists():
-        raise FileNotFoundError(f"Missing epoch file: {epoch_path}")
-
-    epochs = mne.read_epochs(str(epoch_path), preload=True)
-
-    # We decode 2-4 s to focus on response formation and avoid pre-onset baseline.
-    response_epochs = epochs.copy().crop(tmin=2.0, tmax=4.0)
-    response_epochs.pick("eeg")
-
-    return response_epochs.get_data(copy=True)
-
-def _load_feedback_features(subject_id: str, person: str) -> np.ndarray:
-    epoch_path = _get_epoch_path(subject_id, person)
-    if not epoch_path.exists():
-        raise FileNotFoundError(f"Missing epoch file: {epoch_path}")
-
-    epochs = mne.read_epochs(str(epoch_path), preload=True)
-
-    # We decode 4-5s to focus on feedback formation and avoid pre-onset baseline.
-    feedback_epochs = epochs.copy().crop(tmin=4.0, tmax=5.0)
-    feedback_epochs.pick("eeg")
-
-    return feedback_epochs.get_data(copy=True)
-
-
-def _decode_subject_person(
-    subject_id: str,
-    person: str,
-    n_splits: int,
-    n_permutations: int,
-    random_state: int,
-) -> dict:
-    
-    features = _load_features(subject_id, person)
-
-    X_decision_full = features["decision"]
-    X_response_full = features["response"]
-    X_feedback_full = features["feedback"]
-
-    console.print(f"Loaded features for sub-{subject_id} {person}")
-
-    y_full = _load_labels(subject_id, person)
-
-    # Keep only the overlap if lengths differ.
-    #Decision
-    n_decision = min(len(X_decision_full), len(y_full))
-    X_decision_full = X_decision_full[:n_decision]
-    y_decision = y_full[:n_decision]
-    #Response
-    n_response = min(len(X_response_full), len(y_full))
-    X_response_full = X_response_full[:n_response]
-    y_response = y_full[:n_response]
-    #Feedback
-    n_feedback = min(len(X_feedback_full), len(y_full))
-    X_feedback_full = X_feedback_full[:n_feedback]
-    y_feedback = y_full[:n_feedback]
-
-    # Remove no-response trials (0), decode only rock/paper/scissors.
-    mask = np.isin(y_full, [1, 2, 3])
-    X_decision_full = X_decision_full[mask]
-    X_response_full = X_response_full[mask]
-    X_feedback_full = X_feedback_full[mask]
-    y_decision = y_decision[mask]
-    y_response = y_response[mask]
-    y_feedback = y_feedback[mask]
-
-    if len(np.unique(y_decision)) < 3 or len(np.unique(y_response)) < 3 or len(np.unique(y_feedback)) < 3:
-        raise ValueError(
-            f"Not enough classes for sub-{subject_id} {person}. Classes found: {sorted(set(y_decision.tolist()))}"
-        )
-
-    class_counts = {RESP_CODE_TO_NAME[int(code)]: int(np.sum(y_decision == code)) for code in sorted(np.unique(y_decision))}
-
-    clf = Pipeline(
+def _classifier() -> Pipeline:
+    return Pipeline(
         steps=[
             ("scaler", StandardScaler()),
             ("lda", LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")),
         ]
     )
 
-    def _calculate_bin_scores(X_full: np.ndarray, y: np.ndarray, bin_func: callable, n_bins: int) -> tuple[list[float], list[float]]:
-        # Match paper idea: decode in 250 ms bins. We use the mean EEG value inside each
-        n_times = X_full.shape[2]
-        bin_edges = np.linspace(0, n_times, n_bins + 1, dtype=int)
-        bin_starts_s, bin_ends_s, bin_centers_s = bin_func(n_bins)
 
-        cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
-        bin_scores: list[float] = []
-        bin_perm_pvalues: list[float] = []
-
-        for i in range(n_bins):
-            start = bin_edges[i]
-            stop = bin_edges[i + 1]
-            X_bin = X_full[:, :, start:stop].mean(axis=2)
-
-            cv_scores_bin = cross_val_score(clf, X_bin, y, cv=cv, scoring="accuracy", n_jobs=-1)
-            bin_scores.append(float(np.mean(cv_scores_bin)))
-
-            observed_acc, _perm_scores, pvalue = permutation_test_score(
-                clf,
-                X_bin,
-                y,
-                scoring="accuracy",
-                cv=cv,
-                n_permutations=n_permutations,
-                random_state=random_state,
-                n_jobs=-1,
-            )
-            # Keep both the mean CV score and permutation score diagnostics.
-            if abs(observed_acc - bin_scores[-1]) > 0.2:
-                pass
-            bin_perm_pvalues.append(float(pvalue))
-
-        mean_acc = float(np.mean(bin_scores))
-        min_perm_pvalue = float(np.min(bin_perm_pvalues))
+def _prepare_phase_data(X_full: np.ndarray, y_full: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    n = min(len(X_full), len(y_full))
+    X = X_full[:n]
+    y = y_full[:n]
+    mask = np.isin(y, [1, 2, 3])
+    return X[mask], y[mask]
 
 
-        return {
-            "subject": subject_id,
-            "person": person,
-            "n_trials_used": int(len(y)),
-            "class_counts": class_counts,
-            "cv_accuracy_mean": mean_acc,
-            "cv_accuracy_std": float(np.std(bin_scores)),
-            "n_time_bins": int(n_bins),
-            "chance_level": 1.0 / 3.0,
-            "above_chance": bool(mean_acc > (1.0 / 3.0)),
-            "permutation_accuracy": mean_acc,
-            "permutation_pvalue": min_perm_pvalue,
-            "n_permutations": int(n_permutations),
-            "bin_starts_s": bin_starts_s,
-            "bin_ends_s": bin_ends_s,
-            "bin_centers_s": bin_centers_s,
-            "bin_scores": [float(score) for score in bin_scores],
-            "bin_permutation_pvalues": [float(pvalue) for pvalue in bin_perm_pvalues],
-        }
-    
-    # Process all phases sequentially with sklearn's built-in n_jobs parallelization.
-    # This uses process-based parallelism and avoids Python's GIL overhead.
-    decision_results = _calculate_bin_scores(
-        X_decision_full,
-        y_decision,
-        _get_decision_bin_windows,
-        8)
-    response_results = _calculate_bin_scores(
-        X_response_full,
-        y_response,
-        _get_response_bin_windows,
-        8)
-    feedback_results = _calculate_bin_scores(
-        X_feedback_full,
-        y_feedback,
-        _get_feedback_bin_windows,
-        4)
-
-    return {
-        "decision": decision_results,
-        "response": response_results,
-        "feedback": feedback_results,
-    }
-
-    
-def run_decoding(
-    subjects: list[str],
+def _decode_phase(
+    subject_id: str,
+    person: str,
+    phase: str,
+    target: str,
+    match_state: str,
+    X_full: np.ndarray,
+    y_full: np.ndarray,
     n_splits: int,
     n_permutations: int,
     random_state: int,
-) -> tuple[list[dict], dict]:
-    rows: list[dict] = []
+) -> dict:
+    X, y = _prepare_phase_data(X_full, y_full)
+    classes, class_counts = np.unique(y, return_counts=True)
+    if len(classes) < 3:
+        raise ValueError(
+            f"Not enough classes for sub-{subject_id} {person} {target} {phase}: {classes.tolist()}"
+        )
+
+    actual_splits = min(n_splits, int(class_counts.min()))
+    if actual_splits < 2:
+        raise ValueError(
+            f"Insufficient per-class samples for sub-{subject_id} {person} {target} {phase}."
+        )
+
+    class_count_map = {
+        RESP_CODE_TO_NAME[int(code)]: int(count)
+        for code, count in zip(classes, class_counts)
+    }
+
+    clf = _classifier()
+    cv = StratifiedKFold(n_splits=actual_splits, shuffle=True, random_state=random_state)
+    n_bins = int(PHASE_SPECS[phase]["n_bins"])
+    n_times = X.shape[2]
+    bin_edges = np.linspace(0, n_times, n_bins + 1, dtype=int)
+    bin_starts_s, bin_ends_s, bin_centers_s = get_phase_bin_windows(phase)
+
+    bin_scores: list[float] = []
+    bin_perm_pvalues: list[float] = []
+    for index in range(n_bins):
+        start = bin_edges[index]
+        stop = bin_edges[index + 1]
+        X_bin = X[:, :, start:stop].mean(axis=2)
+
+        cv_scores = cross_val_score(clf, X_bin, y, cv=cv, scoring="balanced_accuracy", n_jobs=-1)
+        bin_scores.append(float(np.mean(cv_scores)))
+
+        _score, _perm_scores, pvalue = permutation_test_score(
+            clf,
+            X_bin,
+            y,
+            scoring="balanced_accuracy",
+            cv=cv,
+            n_permutations=n_permutations,
+            random_state=random_state,
+            n_jobs=-1,
+        )
+        bin_perm_pvalues.append(float(pvalue))
+
+    chance_level = 1.0 / 3.0
+    return {
+        "subject": subject_id,
+        "person": person,
+        "phase": phase,
+        "target": target,
+        "match_status": match_state,
+        "n_trials_used": int(len(y)),
+        "class_counts": class_count_map,
+        "cv_accuracy_mean": float(np.mean(bin_scores)),
+        "cv_accuracy_std": float(np.std(bin_scores)),
+        "n_time_bins": int(n_bins),
+        "chance_level": chance_level,
+        "above_chance": bool(np.mean(bin_scores) > chance_level),
+        "permutation_accuracy": float(np.mean(bin_scores)),
+        "permutation_pvalue": float(np.min(bin_perm_pvalues)),
+        "n_permutations": int(n_permutations),
+        "n_splits_used": int(actual_splits),
+        "bin_starts_s": bin_starts_s,
+        "bin_ends_s": bin_ends_s,
+        "bin_centers_s": bin_centers_s,
+        "bin_scores": [float(score) for score in bin_scores],
+        "bin_permutation_pvalues": [float(pvalue) for pvalue in bin_perm_pvalues],
+    }
+
+
+def _decode_subject_person(
+    subject_id: str,
+    person: str,
+    target: str,
+    phases: list[str],
+    n_splits: int,
+    n_permutations: int,
+    random_state: int,
+) -> dict[str, dict]:
+    events_df = load_events_df(subject_id)
+    labels = build_target_labels(events_df, person, target)
+    match_state = match_status(events_df, person)
+    features = load_phase_features(subject_id, person, phases)
+
+    results: dict[str, dict] = {}
+    for phase in phases:
+        results[phase] = _decode_phase(
+            subject_id=subject_id,
+            person=person,
+            phase=phase,
+            target=target,
+            match_state=match_state,
+            X_full=features[phase],
+            y_full=labels,
+            n_splits=n_splits,
+            n_permutations=n_permutations,
+            random_state=random_state,
+        )
+    return results
+
+
+def run_decoding(
+    subjects: list[str],
+    target: str,
+    phases: list[str],
+    n_splits: int,
+    n_permutations: int,
+    random_state: int,
+) -> tuple[dict[str, list[dict]], dict]:
+    rows_by_phase = {phase: [] for phase in phases}
 
     with Live(progress, console=console, refresh_per_second=1) as live:
-        # Calculate total items to process (subjects × persons)
         total_items = len(subjects) * 2
-        task_id = progress.add_task("Decoding subjects", total=total_items)
+        task_id = progress.add_task(f"Decoding {target}", total=total_items)
 
         for subject_id in subjects:
             for person in ["P1", "P2"]:
                 try:
-                    # Update progress description
-                    progress.update(task_id, description=f"Decoding sub-{subject_id} {person}")
+                    progress.update(task_id, description=f"{target}: sub-{subject_id} {person}")
                     live.refresh()
 
-                    row = _decode_subject_person(
+                    person_results = _decode_subject_person(
                         subject_id=subject_id,
                         person=person,
+                        target=target,
+                        phases=phases,
                         n_splits=n_splits,
                         n_permutations=n_permutations,
                         random_state=random_state,
                     )
-                    rows.append(row)
-                    console.print(
-                        f"[green]✓[/green] sub-{subject_id} {person}: "
-                        f"decision acc={row['decision']['cv_accuracy_mean']:.3f} (p={row['decision']['permutation_pvalue']:.4f}), "
-                        f"response acc={row['response']['cv_accuracy_mean']:.3f} (p={row['response']['permutation_pvalue']:.4f}), "
-                        f"feedback acc={row['feedback']['cv_accuracy_mean']:.3f} (p={row['feedback']['permutation_pvalue']:.4f})"
+                    for phase, row in person_results.items():
+                        rows_by_phase[phase].append(row)
+
+                    status_line = ", ".join(
+                        f"{phase}={person_results[phase]['cv_accuracy_mean']:.3f}"
+                        for phase in phases
                     )
+                    console.print(f"[green]✓[/green] sub-{subject_id} {person}: {status_line}")
                 except Exception as exc:
                     console.print(f"[yellow]⚠[/yellow] sub-{subject_id} {person}: skipped ({exc})")
 
-                # Advance progress bar
                 progress.advance(task_id)
                 live.refresh()
 
-    if not rows:
-        raise RuntimeError("No valid subject/person results were produced.")
+    if not any(rows_by_phase.values()):
+        raise RuntimeError(f"No valid results produced for target={target}.")
 
-    acc_decision = np.array([row["decision"]["cv_accuracy_mean"] for row in rows], dtype=float)
-    acc_response = np.array([row["response"]["cv_accuracy_mean"] for row in rows], dtype=float)
-    acc_feedback = np.array([row["feedback"]["cv_accuracy_mean"] for row in rows], dtype=float)
     chance = 1.0 / 3.0
-    t_stat_decision, t_p_two_tailed_decision = ttest_1samp(acc_decision, popmean=chance)
-    t_stat_response, t_p_two_tailed_response = ttest_1samp(acc_response, popmean=chance)
-    t_stat_feedback, t_p_two_tailed_feedback = ttest_1samp(acc_feedback, popmean=chance)
-
-    summary = {
-        "n_subject_person": int(len(rows)),
-        "mean_accuracy_decision": float(np.mean(acc_decision)),
-        "mean_accuracy_response": float(np.mean(acc_response)),
-        "mean_accuracy_feedback": float(np.mean(acc_feedback)),
-        "std_accuracy_decision": float(np.std(acc_decision)),
-        "std_accuracy_response": float(np.std(acc_response)),
-        "std_accuracy_feedback": float(np.std(acc_feedback)),
+    summary: dict[str, object] = {
+        "target": target,
+        "target_label": TARGET_DISPLAY_NAMES[target],
         "chance_level": chance,
-        "n_above_chance_decision": int(np.sum(acc_decision > chance)),
-        "n_above_chance_response": int(np.sum(acc_response > chance)),
-        "n_above_chance_feedback": int(np.sum(acc_feedback > chance)),
-        "group_t_stat_decision": float(t_stat_decision),
-        "group_t_stat_response": float(t_stat_response),
-        "group_t_stat_feedback": float(t_stat_feedback),
-        "group_pvalue_two_tailed_decision": float(t_p_two_tailed_decision),
-        "group_pvalue_two_tailed_response": float(t_p_two_tailed_response),
-        "group_pvalue_two_tailed_feedback": float(t_p_two_tailed_feedback),
-        "group_pvalue_one_tailed_gt_chance_decision": float(t_p_two_tailed_decision / 2.0) if t_stat_decision > 0 else 1.0,
-        "group_pvalue_one_tailed_gt_chance_response": float(t_p_two_tailed_response / 2.0) if t_stat_response > 0 else 1.0,
-        "group_pvalue_one_tailed_gt_chance_feedback": float(t_p_two_tailed_feedback / 2.0) if t_stat_feedback > 0 else 1.0,
+        "n_subject_person": int(max((len(rows) for rows in rows_by_phase.values()), default=0)),
+        "phases": phases,
     }
+    for phase in phases:
+        rows = rows_by_phase[phase]
+        acc = np.asarray([row["cv_accuracy_mean"] for row in rows], dtype=float)
+        t_stat, p_two_tailed = ttest_1samp(acc, popmean=chance)
+        summary[f"mean_accuracy_{phase}"] = float(np.mean(acc))
+        summary[f"std_accuracy_{phase}"] = float(np.std(acc))
+        summary[f"n_above_chance_{phase}"] = int(np.sum(acc > chance))
+        summary[f"group_t_stat_{phase}"] = float(t_stat)
+        summary[f"group_pvalue_two_tailed_{phase}"] = float(p_two_tailed)
+        summary[f"group_pvalue_one_tailed_gt_chance_{phase}"] = float(p_two_tailed / 2.0) if t_stat > 0 else 1.0
 
-    return rows, summary
+    return rows_by_phase, summary
 
 
 def _to_dataframe(rows: list[dict]) -> pd.DataFrame:
@@ -396,7 +273,7 @@ def _to_dataframe(rows: list[dict]) -> pd.DataFrame:
 
 
 def _to_timecourse_dataframe(rows: list[dict]) -> pd.DataFrame:
-    records = []
+    records: list[dict] = []
     for row in rows:
         for bin_index, (start_s, end_s, center_s, score, pvalue) in enumerate(
             zip(
@@ -411,6 +288,9 @@ def _to_timecourse_dataframe(rows: list[dict]) -> pd.DataFrame:
                 {
                     "subject": row["subject"],
                     "person": row["person"],
+                    "phase": row["phase"],
+                    "target": row["target"],
+                    "match_status": row["match_status"],
                     "bin_index": int(bin_index),
                     "bin_start_s": float(start_s),
                     "bin_end_s": float(end_s),
@@ -438,19 +318,18 @@ def _save_accuracy_plot(df: pd.DataFrame, summary: dict, out_dir: Path, phase: s
     ax.bar(x, values, yerr=errors, capsize=4, color=colors, edgecolor="black", linewidth=0.8)
     ax.axhline(chance, color="#c62828", linestyle="--", linewidth=1.5, label=f"Chance = {chance:.3f}")
     ax.axhline(mean_acc, color="#2e7d32", linestyle=":", linewidth=1.5, label=f"Mean = {mean_acc:.3f}")
-
-    ax.set_title(f"{phase.capitalize()}-Phase Decoding Accuracy")
-    ax.set_ylabel("Classification accuracy")
+    ax.set_title(f"{summary['target_label']} · {phase.capitalize()} phase")
+    ax.set_ylabel("Balanced accuracy")
     ax.set_xlabel("Subject / player")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=45, ha="right")
-    ax.set_ylim(0.28, max(0.4, float(np.max(values + errors)) + 0.01))
+    ax.set_ylim(max(0.0, float(np.min(values - errors)) - 0.03), max(0.45, float(np.max(values + errors)) + 0.03))
     ax.grid(axis="y", alpha=0.25)
     ax.legend()
 
     subtitle = (
         f"One-tailed group p = {summary[f'group_pvalue_one_tailed_gt_chance_{phase}']:.4f}, "
-        f"above chance = {summary[f'n_above_chance_{phase}']}/{summary[f'n_subject_person']}"
+        f"above chance = {summary[f'n_above_chance_{phase}']}/{summary['n_subject_person']}"
     )
     fig.text(0.5, 0.01, subtitle, ha="center", va="bottom")
     fig.tight_layout(rect=(0, 0.04, 1, 1))
@@ -475,16 +354,19 @@ def _save_timecourse_plot(timecourse_df: pd.DataFrame, summary: dict, out_dir: P
     chance = float(summary["chance_level"])
 
     fig, ax = plt.subplots(figsize=(9.5, 5.5))
-    ax.plot(x, y, color="#1f77b4", marker="o", linewidth=2.0, label="Mean accuracy")
+    ax.plot(x, y, color="#1f77b4", marker="o", linewidth=2.0, label="Mean balanced accuracy")
     ax.fill_between(x, y - yerr, y + yerr, color="#1f77b4", alpha=0.18, label="±1 SD")
     ax.axhline(chance, color="#c62828", linestyle="--", linewidth=1.5, label=f"Chance = {chance:.3f}")
-
-    ax.set_title(f"{phase.capitalize()}-Phase Decoding Time Course")
+    ax.set_title(f"{summary['target_label']} · {phase.capitalize()} time course")
     ax.set_xlabel(f"Time from {phase} onset (s)")
-    ax.set_ylabel("Classification accuracy")
+    ax.set_ylabel("Balanced accuracy")
     ax.set_xticks(x)
-    ax.set_xticklabels([f"{start:.2f}-{end:.2f}" for start, end in zip(grouped["bin_start_s"], grouped["bin_end_s"])], rotation=45, ha="right")
-    ax.set_ylim(min(chance - 0.03, float(np.min(y - yerr)) - 0.01), max(0.4, float(np.max(y + yerr)) + 0.01))
+    ax.set_xticklabels(
+        [f"{start:.2f}-{end:.2f}" for start, end in zip(grouped["bin_start_s"], grouped["bin_end_s"])],
+        rotation=45,
+        ha="right",
+    )
+    ax.set_ylim(max(0.0, float(np.min(y - yerr)) - 0.03), max(0.45, float(np.max(y + yerr)) + 0.03))
     ax.grid(axis="y", alpha=0.25)
     ax.legend()
     fig.tight_layout()
@@ -519,20 +401,19 @@ def _save_timecourse_plot_by_person(
     chance = float(summary["chance_level"])
 
     fig, ax = plt.subplots(figsize=(9.5, 5.5))
-    ax.plot(x, y, color="#1f77b4", marker="o", linewidth=2.0, label=f"Mean accuracy ({person})")
+    ax.plot(x, y, color="#1f77b4", marker="o", linewidth=2.0, label=f"Mean balanced accuracy ({person})")
     ax.fill_between(x, y - yerr, y + yerr, color="#1f77b4", alpha=0.18, label="±1 SD")
     ax.axhline(chance, color="#c62828", linestyle="--", linewidth=1.5, label=f"Chance = {chance:.3f}")
-
-    ax.set_title(f"{phase.capitalize()}-Phase Decoding Time Course ({person})")
+    ax.set_title(f"{summary['target_label']} · {phase.capitalize()} time course ({person})")
     ax.set_xlabel(f"Time from {phase} onset (s)")
-    ax.set_ylabel("Classification accuracy")
+    ax.set_ylabel("Balanced accuracy")
     ax.set_xticks(x)
     ax.set_xticklabels(
         [f"{start:.2f}-{end:.2f}" for start, end in zip(grouped["bin_start_s"], grouped["bin_end_s"])],
         rotation=45,
         ha="right",
     )
-    ax.set_ylim(min(chance - 0.03, float(np.min(y - yerr)) - 0.01), max(0.4, float(np.max(y + yerr)) + 0.01))
+    ax.set_ylim(max(0.0, float(np.min(y - yerr)) - 0.03), max(0.45, float(np.max(y + yerr)) + 0.03))
     ax.grid(axis="y", alpha=0.25)
     ax.legend()
     fig.tight_layout()
@@ -543,137 +424,112 @@ def _save_timecourse_plot_by_person(
     return plot_path
 
 
-def main() -> None:
+def _save_target_outputs(
+    out_dir: Path,
+    rows_by_phase: dict[str, list[dict]],
+    summary: dict,
+    *,
+    plot_only: bool,
+) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    json_path_summary = out_dir / "decoding_summary.json"
 
-    mne.set_config("MNE_LOGGING_LEVEL", "ERROR")  # Ensure MNE logging is configured before any MNE calls.
+    if not plot_only:
+        json_path_summary.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
+    for phase, rows in rows_by_phase.items():
+        df = _to_dataframe(rows)
+        timecourse_df = _to_timecourse_dataframe(rows)
+        csv_path = out_dir / f"{phase}_phase_decoding_results.csv"
+        timecourse_csv_path = out_dir / f"{phase}_phase_decoding_timecourse.csv"
+
+        if not plot_only:
+            df.to_csv(csv_path, index=False)
+            timecourse_df.to_csv(timecourse_csv_path, index=False)
+        else:
+            df = pd.read_csv(csv_path)
+            timecourse_df = pd.read_csv(timecourse_csv_path)
+
+        _save_accuracy_plot(df, summary, out_dir, phase)
+        _save_timecourse_plot(timecourse_df, summary, out_dir, phase)
+        _save_timecourse_plot_by_person(timecourse_df, summary, out_dir, "P1", phase)
+        _save_timecourse_plot_by_person(timecourse_df, summary, out_dir, "P2", phase)
+
+
+def main() -> None:
+    mne.set_config("MNE_LOGGING_LEVEL", "ERROR")
 
     parser = argparse.ArgumentParser(
-        description=(
-            "Decode rock/paper/scissors from EEG during the Decision phase (0-2 s after decision onset)."
-        )
+        description="All-phase EEG decoding for current and previous self/other RPS decisions."
     )
     parser.add_argument("--subjects", type=str, default=None, help="Comma-separated subject IDs, e.g. 01,02,03")
-    parser.add_argument("--n-splits", type=int, default=10, help="Number of CV folds (default: 10)")
+    parser.add_argument(
+        "--targets",
+        type=str,
+        default="current_self",
+        help="Comma-separated targets: current_self,current_other,previous_self,previous_other",
+    )
+    parser.add_argument(
+        "--phases",
+        type=str,
+        default="decision,response,feedback",
+        help="Comma-separated phases: decision,response,feedback",
+    )
+    parser.add_argument("--n-splits", type=int, default=10, help="Maximum number of CV folds")
     parser.add_argument(
         "--n-permutations",
         type=int,
         default=200,
-        help="Number of label permutations for the above-chance test (default: 200)",
+        help="Number of label permutations for the above-chance test",
     )
-    parser.add_argument(
-        "--plot-only",
-        action="store_true",
-        help="Skip decoding and only generate plots from existing CSV/JSON results (default: False)",
-    )
+    parser.add_argument("--plot-only", action="store_true", help="Reuse existing CSV/JSON results and only replot")
     parser.add_argument("--random-state", type=int, default=42, help="Random seed")
     args = parser.parse_args()
 
-    subjects = _resolve_subjects(args.subjects)
-
-    out_dir = Path(config.OUTPUT_DIR).parent / "decoding"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-
-    csv_path_decision = out_dir / "decision_phase_decoding_results.csv"
-    csv_path_response = out_dir / "response_phase_decoding_results.csv"
-    csv_path_feedback = out_dir / "feedback_phase_decoding_results.csv"
-    timecourse_csv_path_decision = out_dir / "decision_phase_decoding_timecourse.csv"
-    timecourse_csv_path_response = out_dir / "response_phase_decoding_timecourse.csv"
-    timecourse_csv_path_feedback = out_dir / "feedback_phase_decoding_timecourse.csv"
-    json_path_summary = out_dir / "decoding_summary.json"
-
-    if not args.plot_only:
-
-        rows, summary = run_decoding(
-            subjects=subjects,
-            n_splits=args.n_splits,
-            n_permutations=args.n_permutations,
-            random_state=args.random_state,
-        )
-
-
-        df_decision = _to_dataframe(row["decision"] for row in rows)
-        df_response = _to_dataframe(row["response"] for row in rows)
-        df_feedback = _to_dataframe(row["feedback"] for row in rows)
-        
-        df_decision.to_csv(csv_path_decision, index=False)
-        df_response.to_csv(csv_path_response, index=False)
-        df_feedback.to_csv(csv_path_feedback, index=False)
-
-        timecourse_df_decision = _to_timecourse_dataframe(row["decision"] for row in rows)
-        timecourse_df_response = _to_timecourse_dataframe(row["response"] for row in rows)
-        timecourse_df_feedback = _to_timecourse_dataframe(row["feedback"] for row in rows)
-        
-        timecourse_df_decision.to_csv(timecourse_csv_path_decision, index=False)
-        timecourse_df_response.to_csv(timecourse_csv_path_response, index=False)
-        timecourse_df_feedback.to_csv(timecourse_csv_path_feedback, index=False)
-
-        json_path_summary.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-
-    else:
-        if not (csv_path_decision.exists() and csv_path_response.exists() and csv_path_feedback.exists()):
-            raise FileNotFoundError("CSV results not found. Please run without --plot-only first.")
-        if not (timecourse_csv_path_decision.exists() and timecourse_csv_path_response.exists() and timecourse_csv_path_feedback.exists()):
-            raise FileNotFoundError("Time-course CSV results not found. Please run without --plot-only first.")
-
-        df_decision = pd.read_csv(csv_path_decision)
-        df_response = pd.read_csv(csv_path_response)
-        df_feedback = pd.read_csv(csv_path_feedback)
-        timecourse_df_decision = pd.read_csv(timecourse_csv_path_decision)
-        timecourse_df_response = pd.read_csv(timecourse_csv_path_response)
-        timecourse_df_feedback = pd.read_csv(timecourse_csv_path_feedback)
-        summary = json.loads(json_path_summary.read_text(encoding="utf-8"))
-
-    plot_path_decision = _save_accuracy_plot(df_decision, summary, out_dir, "decision")
-    plot_path_response = _save_accuracy_plot(df_response, summary, out_dir, "response")
-    plot_path_feedback = _save_accuracy_plot(df_feedback, summary, out_dir, "feedback")
-    timecourse_plot_path_decision = _save_timecourse_plot(timecourse_df_decision, summary, out_dir, "decision")
-    timecourse_plot_path_response = _save_timecourse_plot(timecourse_df_response, summary, out_dir, "response")
-    timecourse_plot_path_feedback = _save_timecourse_plot(timecourse_df_feedback, summary, out_dir, "feedback")
-    timecourse_plot_p1_path_decision = _save_timecourse_plot_by_person(timecourse_df_decision, summary, out_dir, "P1", "decision")
-    timecourse_plot_p1_path_response = _save_timecourse_plot_by_person(timecourse_df_response, summary, out_dir, "P1", "response")
-    timecourse_plot_p1_path_feedback = _save_timecourse_plot_by_person(timecourse_df_feedback, summary, out_dir, "P1", "feedback")
-    timecourse_plot_p2_path_decision = _save_timecourse_plot_by_person(timecourse_df_decision, summary, out_dir, "P2", "decision")
-    timecourse_plot_p2_path_response = _save_timecourse_plot_by_person(timecourse_df_response, summary, out_dir, "P2", "response")
-    timecourse_plot_p2_path_feedback = _save_timecourse_plot_by_person(timecourse_df_feedback, summary, out_dir, "P2", "feedback")
-
-    print("\n=== Group Summary ===")
-    print(f"N subject/person: {summary['n_subject_person']}")
-    print(f"Mean accuracy (decision): {summary['mean_accuracy_decision']:.3f} (chance: {summary['chance_level']:.3f})")
-    print(f"Mean accuracy (response): {summary['mean_accuracy_response']:.3f} (chance: {summary['chance_level']:.3f})")
-    print(f"Mean accuracy (feedback): {summary['mean_accuracy_feedback']:.3f} (chance: {summary['chance_level']:.3f})")
-    print(f"Above chance count (decision): {summary['n_above_chance_decision']}/{summary['n_subject_person']}")
-    print(f"Above chance count (response): {summary['n_above_chance_response']}/{summary['n_subject_person']}")
-    print(f"Above chance count (feedback): {summary['n_above_chance_feedback']}/{summary['n_subject_person']}")
-    print(
-        "One-tailed group p (accuracy decision > chance): "
-        f"{summary['group_pvalue_one_tailed_gt_chance_decision']:.6f}"
+    subjects = resolve_subjects(args.subjects)
+    targets = resolve_csv_argument(
+        args.targets,
+        allowed=TARGET_CHOICES,
+        default=["current_self"],
     )
-    print(
-        "One-tailed group p (accuracy response > chance): "
-        f"{summary['group_pvalue_one_tailed_gt_chance_response']:.6f}"
+    phases = resolve_csv_argument(
+        args.phases,
+        allowed=tuple(PHASE_SPECS.keys()),
+        default=["decision", "response", "feedback"],
     )
-    print(
-        "One-tailed group p (accuracy feedback > chance): "
-        f"{summary['group_pvalue_one_tailed_gt_chance_feedback']:.6f}"
-    )
-    print(f"Saved per-subject results: {csv_path_decision}, {csv_path_response}, {csv_path_feedback}")
-    print(f"Saved time-course results: {timecourse_csv_path_decision}, {timecourse_csv_path_response}, {timecourse_csv_path_feedback}")
-    print(f"Saved summary: {json_path_summary}")
-    print(f"Saved plot: {plot_path_decision}, {plot_path_response}, {plot_path_feedback}")
-    print(f"Saved time-course plot: {timecourse_plot_path_decision}, {timecourse_plot_path_response}, {timecourse_plot_path_feedback}")
-    if timecourse_plot_p1_path_decision is not None:
-        print(f"Saved time-course plot (P1): {timecourse_plot_p1_path_decision}")
-    if timecourse_plot_p1_path_response is not None:
-        print(f"Saved time-course plot (P1): {timecourse_plot_p1_path_response}")
-    if timecourse_plot_p1_path_feedback is not None:
-        print(f"Saved time-course plot (P1): {timecourse_plot_p1_path_feedback}")
-    if timecourse_plot_p2_path_decision is not None:
-        print(f"Saved time-course plot (P2): {timecourse_plot_p2_path_decision}")
-    if timecourse_plot_p2_path_response is not None:
-        print(f"Saved time-course plot (P2): {timecourse_plot_p2_path_response}")
-    if timecourse_plot_p2_path_feedback is not None:
-        print(f"Saved time-course plot (P2): {timecourse_plot_p2_path_feedback}")
+
+    base_out_dir = Path(config.OUTPUT_DIR).parent / "decoding"
+    base_out_dir.mkdir(parents=True, exist_ok=True)
+
+    for target in targets:
+        out_dir = target_output_dir(base_out_dir, target)
+
+        if args.plot_only:
+            summary_path = out_dir / "decoding_summary.json"
+            if not summary_path.exists():
+                raise FileNotFoundError(f"Summary not found for target={target}: {summary_path}")
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            rows_by_phase = {phase: [] for phase in phases}
+        else:
+            rows_by_phase, summary = run_decoding(
+                subjects=subjects,
+                target=target,
+                phases=phases,
+                n_splits=args.n_splits,
+                n_permutations=args.n_permutations,
+                random_state=args.random_state,
+            )
+
+        _save_target_outputs(out_dir, rows_by_phase, summary, plot_only=args.plot_only)
+
+        print(f"\n=== {TARGET_DISPLAY_NAMES[target]} ===")
+        print(f"Output directory: {out_dir}")
+        print(f"N subject/person: {summary['n_subject_person']}")
+        for phase in phases:
+            print(
+                f"{phase}: mean={summary[f'mean_accuracy_{phase}']:.3f}, "
+                f"one-tailed p={summary[f'group_pvalue_one_tailed_gt_chance_{phase}']:.6f}"
+            )
 
 
 if __name__ == "__main__":

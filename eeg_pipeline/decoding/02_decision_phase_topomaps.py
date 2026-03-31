@@ -140,6 +140,21 @@ def _make_searchlight_clusters(info: mne.Info, n_neighbors: int) -> list[np.ndar
     return clusters
 
 
+def _prepare_topomap_info(info: mne.Info) -> mne.Info:
+    info_plot = info.copy()
+    eeg_picks = mne.pick_types(info_plot, eeg=True, exclude=[])
+    if len(eeg_picks) == 0:
+        raise RuntimeError("No EEG channels available for topomap plotting.")
+
+    info_plot = mne.pick_info(info_plot, eeg_picks, copy=True)
+    has_dig = info_plot.get("dig") is not None and len(info_plot["dig"]) > 0
+    if not has_dig:
+        # Match sanity-check fallback to a standard BioSemi64 head geometry.
+        montage = mne.channels.make_standard_montage("biosemi64", head_size=0.105)
+        info_plot.set_montage(montage, match_case=False, on_missing="ignore")
+    return info_plot
+
+
 def _prepare_subject_person(
     subject_id: str,
     person: str,
@@ -208,22 +223,36 @@ def _save_topomap_grid(
     image = None
 
     for idx, ax in enumerate(axes):
-        image, _ = mne.viz.plot_topomap(
-            data[idx],
-            info,
-            axes=ax,
-            show=False,
-            contours=0,
-            cmap="viridis",
-            vlim=(vmin, vmax),
-        )
+        try:
+            image, _ = mne.viz.plot_topomap(
+                data[idx],
+                info,
+                axes=ax,
+                show=False,
+                contours=0,
+                cmap="viridis",
+                vlim=(vmin, vmax),
+                sphere="eeglab",
+            )
+        except Exception:
+            image, _ = mne.viz.plot_topomap(
+                data[idx],
+                info,
+                axes=ax,
+                show=False,
+                contours=0,
+                cmap="viridis",
+                vlim=(vmin, vmax),
+                sphere="auto",
+            )
         start_s, end_s = windows[idx]
         ax.set_title(f"{start_s:.2f}-{end_s:.2f} s")
 
     fig.suptitle(title)
-    colorbar = fig.colorbar(image, ax=axes.tolist(), shrink=0.85)
+    fig.subplots_adjust(left=0.04, right=0.90, top=0.90, bottom=0.05, wspace=0.18, hspace=0.22)
+    cax = fig.add_axes([0.92, 0.16, 0.015, 0.68])
+    colorbar = fig.colorbar(image, cax=cax)
     colorbar.set_label("Decoding accuracy")
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
     return out_path
@@ -246,22 +275,36 @@ def _save_collapsed_topomaps(
     image = None
 
     for idx, ax in enumerate(np.atleast_1d(axes)):
-        image, _ = mne.viz.plot_topomap(
-            collapsed[idx],
-            info,
-            axes=ax,
-            show=False,
-            contours=0,
-            cmap="viridis",
-            vlim=(vmin, vmax),
-        )
+        try:
+            image, _ = mne.viz.plot_topomap(
+                collapsed[idx],
+                info,
+                axes=ax,
+                show=False,
+                contours=0,
+                cmap="viridis",
+                vlim=(vmin, vmax),
+                sphere="eeglab",
+            )
+        except Exception:
+            image, _ = mne.viz.plot_topomap(
+                collapsed[idx],
+                info,
+                axes=ax,
+                show=False,
+                contours=0,
+                cmap="viridis",
+                vlim=(vmin, vmax),
+                sphere="auto",
+            )
         start_s, end_s = windows[idx]
         ax.set_title(f"{start_s:.2f}-{end_s:.2f} s")
 
     fig.suptitle(title)
-    colorbar = fig.colorbar(image, ax=np.atleast_1d(axes).tolist(), shrink=0.85)
+    fig.subplots_adjust(left=0.06, right=0.86, top=0.86, bottom=0.08, wspace=0.18)
+    cax = fig.add_axes([0.88, 0.18, 0.02, 0.65])
+    colorbar = fig.colorbar(image, cax=cax)
     colorbar.set_label("Decoding accuracy")
-    fig.tight_layout(rect=(0, 0, 1, 0.92))
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
     return out_path
@@ -299,7 +342,7 @@ def run_topomaps(
                     )
 
                     if representative_info is None:
-                        representative_info = info
+                        representative_info = _prepare_topomap_info(info)
                         representative_windows = windows
 
                     group_maps[target].append(maps)
