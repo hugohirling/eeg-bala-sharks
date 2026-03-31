@@ -166,9 +166,10 @@ def process_cross_decoding(subject_id: str):
     # Plot the fluctuating accuracy over time
     ax.plot(epochs_p1.times, mean_scores, label="Predicting P2's Move", color="#e74c3c", linewidth=2)
     
-    # Formulate baseline chance level. For a 3-choice game (Rock/Paper/Scissors), chance is ~33.3%
-    chance_level = 1.0 / len(np.unique(y_opponent))
-    ax.axhline(chance_level, color='k', linestyle='--', label=f"Chance Level ({chance_level*100:.0f}%)")
+    # Hardcode baseline chance level for a 3-choice game (Rock/Paper/Scissors) to 33.3%
+    # This prevents 'Timeout' or 'NaN' trials from skewing the mathematical baseline.
+    chance_level = 1.0 / 3.0
+    ax.axhline(chance_level, color='k', linestyle='--', label=f"Chance Level ({chance_level*100:.1f}%)")
     ax.axvline(0, color='k', linestyle='-', alpha=0.5)
     
     # Highlight the expected temporal phase where predictive simulation should theoretically peak
