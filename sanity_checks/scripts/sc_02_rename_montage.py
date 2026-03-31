@@ -1,11 +1,12 @@
-﻿"""
+﻿# This file's comments were created with the help of GitHub Copilot using GPT-5.3-Codex.
+"""
 Sanity Check for Step 02: Rename & Set Montage
 
-Ueberprueft:
-- Kanaele korrekt umbenannt (BioSemi â†’ 10-20)
-- Montage gesetzt
-- Elektroden-Positionen vorhanden
-- Kanal-Metadaten intakt
+Checks:
+- Channels are renamed correctly (BioSemi to 10-20 labels)
+- Montage is applied
+- Electrode positions are present
+- Channel metadata remains intact
 
 REASONING:
 - Purpose: confirm that channel labels and spatial coordinates are ready for topographies, interpolation, and interpretation.
@@ -42,7 +43,7 @@ def _save_montage_visualizations(raw, subject_id, person):
     out_2d = config.QC_DIR / f"sub-{subject_id}_{person}_montage_positions_2d.png"
     fig_2d.savefig(out_2d, dpi=200, bbox_inches="tight")
     plt.close(fig_2d)
-    print(f"  âœ“ Saved montage plot (2D): {out_2d.name}")
+    print(f"  OK Saved montage plot (2D): {out_2d.name}")
 
     try:
         fig_3d = raw_eeg.plot_sensors(kind="3d", show_names=False, show=False)
@@ -50,7 +51,7 @@ def _save_montage_visualizations(raw, subject_id, person):
         out_3d = config.QC_DIR / f"sub-{subject_id}_{person}_montage_positions_3d.png"
         fig_3d.savefig(out_3d, dpi=200, bbox_inches="tight")
         plt.close(fig_3d)
-        print(f"  âœ“ Saved montage plot (3D): {out_3d.name}")
+        print(f"  OK Saved montage plot (3D): {out_3d.name}")
     except Exception as exc:
         print(f"  WARNING: Could not save 3D montage plot: {exc}")
 
@@ -85,7 +86,7 @@ def sanity_check_rename_montage(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"File exists: {path.name}",
                 category="file_io",
                 rationale=seems_correct_because("the step should persist the renamed channels and montage together in one FIF file"),
@@ -97,7 +98,7 @@ def sanity_check_rename_montage(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"EEG channels available after rename/montage: {len(eeg_names)}",
                 category="structure",
                 rationale=seems_correct_because("the montage step should keep the full EEG set while only changing labels and metadata"),
@@ -122,7 +123,7 @@ def sanity_check_rename_montage(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"Canonical 10-20 labels found: {found_standard}/{len(eeg_names)}",
                 category="naming",
                 rationale=seems_correct_because("recognizable standard labels are a quick indicator that the rename map was applied sensibly"),
@@ -133,7 +134,7 @@ def sanity_check_rename_montage(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âœ“",
+                    "OK",
                     f"Digitization points available: {len(raw.info['dig'])}",
                     category="spatial_metadata",
                     rationale=seems_correct_because("spatial sensor positions are required for topomaps, interpolation, and most scalp-level interpretations"),
@@ -143,7 +144,7 @@ def sanity_check_rename_montage(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âš ",
+                    "WARN",
                     "No electrode positions found in montage",
                     category="spatial_metadata",
                     rationale=strange_because("missing coordinates would make later topographies visually misleading or impossible to compute"),
@@ -156,7 +157,7 @@ def sanity_check_rename_montage(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âš ",
+                    "WARN",
                     f"{old_prefix_count} channels still have old prefix '{prefix}'",
                     category="naming",
                     rationale=strange_because("the rename step should fully remove player-specific acquisition prefixes before standard labels are assigned"),
@@ -165,7 +166,7 @@ def sanity_check_rename_montage(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âœ“",
+                    "OK",
                     "Old prefixes successfully removed",
                     category="naming",
                     rationale=seems_correct_because("clean standard labels reduce ambiguity and make the code easier to read and reproduce"),
@@ -174,7 +175,7 @@ def sanity_check_rename_montage(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"Sampling rate {raw.info['sfreq']} Hz, duration {raw.times[-1]:.2f}s, first EEG labels {eeg_names[:5]}",
                 category="metadata",
                 rationale=seems_correct_because("rename/montage should leave the recording duration untouched while making the channels easier to interpret"),
@@ -183,7 +184,7 @@ def sanity_check_rename_montage(subjects):
     collector.print_summary()
     output_csv = config.QC_DIR / "sc_02_rename_montage_summary.csv"
     collector.export_csv(output_csv)
-    print(f"\nâœ“ Summary exported to {output_csv.name}\n")
+    print(f"\nOK Summary exported to {output_csv.name}\n")
 
 
 def run_visualizations(subjects):

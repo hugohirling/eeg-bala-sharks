@@ -1,11 +1,12 @@
-﻿"""
+﻿# This file's comments were created with the help of GitHub Copilot using GPT-5.3-Codex.
+"""
 Sanity Check for Step 03: Bad Channels Detect
 
-Ueberprueft:
-- Bad channels identifiziert
-- QC-Reports erstellt
-- Markierung in Raw-Objekten
-- Statistiken plausibel
+Checks:
+- Bad channels are identified
+- QC reports are generated
+- Bad channels are marked in raw objects
+- Summary statistics are plausible
 
 REASONING:
 - Purpose: identify unusable sensors before interpolation and ICA so artifacts do not propagate downstream.
@@ -60,7 +61,7 @@ def sanity_check_bad_channels_detect(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"File exists: {path.name}",
                 category="file_io",
                 rationale=seems_correct_because("the detection step should persist both the cleaned metadata and the bad-channel annotations"),
@@ -70,7 +71,7 @@ def sanity_check_bad_channels_detect(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"Bad channels marked: {len(bads)}" + (f" ({', '.join(bads)})" if bads else ""),
                 category="signal_quality",
                 rationale=seems_correct_because("isolating a small number of noisy sensors is expected and protects later interpolation and ICA"),
@@ -84,7 +85,7 @@ def sanity_check_bad_channels_detect(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âœ“",
+                    "OK",
                     f"QC report generated with {len(lines) - 1} analyzed channels: {qc_report_path.name}",
                     category="qc_report",
                     rationale=seems_correct_because("a per-channel report makes the detection step inspectable and easier to justify in the report"),
@@ -93,7 +94,7 @@ def sanity_check_bad_channels_detect(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âš ",
+                    "WARN",
                     "QC report not found",
                     category="qc_report",
                     rationale=strange_because("without the TSV, the grader cannot easily inspect why channels were flagged"),
@@ -104,7 +105,7 @@ def sanity_check_bad_channels_detect(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"EEG channels remaining after exclusion: {len(eeg_picks)}",
                 category="structure",
                 rationale=seems_correct_because("most EEG channels should remain usable after detection; otherwise the recording quality may be globally poor"),
@@ -115,7 +116,7 @@ def sanity_check_bad_channels_detect(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âš ",
+                    "WARN",
                     anomaly,
                     category="signal_quality",
                     rationale=strange_because("too many bad channels usually reflects a broader recording problem, not just a few isolated electrode failures"),
@@ -125,7 +126,7 @@ def sanity_check_bad_channels_detect(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âš ",
+                    "WARN",
                     "More bad channels than total EEG channels",
                     category="signal_quality",
                     rationale=strange_because("this can only happen if metadata or counting logic is inconsistent"),
@@ -134,7 +135,7 @@ def sanity_check_bad_channels_detect(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"Sampling rate preserved: {raw.info['sfreq']} Hz",
                 category="metadata",
                 rationale=seems_correct_because("detecting bad channels should annotate metadata only and not alter the temporal sampling of the recording"),
@@ -143,7 +144,7 @@ def sanity_check_bad_channels_detect(subjects):
     collector.print_summary()
     output_csv = config.QC_DIR / "sc_03_bad_channels_summary.csv"
     collector.export_csv(output_csv)
-    print(f"\nâœ“ Summary exported to {output_csv.name}\n")
+    print(f"\nOK Summary exported to {output_csv.name}\n")
 
 
 def run_visualizations(subjects):

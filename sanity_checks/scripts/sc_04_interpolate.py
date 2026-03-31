@@ -1,11 +1,12 @@
-﻿"""
+﻿# This file's comments were created with the help of GitHub Copilot using GPT-5.3-Codex.
+"""
 Sanity Check for Step 04: Interpolate Bad Channels
 
-Ueberprueft:
-- Interpolation durchgefuehrt
-- Bads-Liste geleert nach Interpolation
-- Kanal-Anzahl gleich geblieben
-- Amplituden noch plausibel
+Checks:
+- Interpolation was applied
+- Bad-channel list is cleared after interpolation
+- Channel count is unchanged
+- Signal amplitudes remain plausible
 
 REASONING:
 - Purpose: verify that bad sensors were repaired in place instead of silently removed from the dataset.
@@ -78,7 +79,7 @@ def sanity_check_interpolate_bad_channels(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"Files exist; bads before/after interpolation = {len(bads_before)}/{len(bads_after)}" + (f" ({', '.join(bads_before)})" if bads_before else ""),
                 category="signal_quality",
                 rationale=seems_correct_because("the same channels marked bad before interpolation should be the ones repaired in the output"),
@@ -89,7 +90,7 @@ def sanity_check_interpolate_bad_channels(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âœ“",
+                    "OK",
                     "Bad channels cleared after interpolation",
                     category="signal_quality",
                     rationale=seems_correct_because("the repaired channels are expected to rejoin the usable sensor set after interpolation"),
@@ -98,7 +99,7 @@ def sanity_check_interpolate_bad_channels(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âš ",
+                    "WARN",
                     "Bad channels still marked after interpolation",
                     category="signal_quality",
                     rationale=strange_because("a repaired output usually clears the bad list; otherwise later steps may still exclude those channels"),
@@ -109,7 +110,7 @@ def sanity_check_interpolate_bad_channels(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âœ“",
+                    "OK",
                     f"Channel count preserved: {len(raw_after.ch_names)}",
                     category="structure",
                     rationale=seems_correct_because("interpolation should repair values in place, not remove sensors"),
@@ -129,7 +130,7 @@ def sanity_check_interpolate_bad_channels(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âœ“",
+                    "OK",
                     f"Sampling rate preserved: {raw_after.info['sfreq']} Hz",
                     category="metadata",
                     rationale=seems_correct_because("interpolation is a spatial operation and should not alter time resolution"),
@@ -150,7 +151,7 @@ def sanity_check_interpolate_bad_channels(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âœ“",
+                    "OK",
                     f"Sample count preserved: {n_samples_after}",
                     category="temporal_integrity",
                     rationale=seems_correct_because("interpolation should preserve the exact sample grid so epoch timing stays aligned"),
@@ -168,7 +169,7 @@ def sanity_check_interpolate_bad_channels(subjects):
     collector.print_summary()
     output_csv = config.QC_DIR / "sc_04_interpolate_summary.csv"
     collector.export_csv(output_csv)
-    print(f"\nâœ“ Summary exported to {output_csv.name}\n")
+    print(f"\nOK Summary exported to {output_csv.name}\n")
 
 
 def run_visualizations(subjects, duration):

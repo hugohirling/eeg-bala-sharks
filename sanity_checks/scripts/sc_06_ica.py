@@ -1,4 +1,5 @@
-﻿"""
+﻿# This file's comments were created with the help of GitHub Copilot using GPT-5.3-Codex.
+"""
 Sanity Check for Step 06: ICA Component Removal
 
 Creates verification plots for the ICA decomposition and bad component removal:
@@ -106,29 +107,29 @@ def sanity_check_ica(subjects, duration, *, run_visualizations=True):
 
             component_meta = collect_component_metadata(raw_before, ica)
 
-            collector.add_result(subject_id, person, "âœ“", "Files exist")
+            collector.add_result(subject_id, person, "OK", "Files exist")
             
             # Verify channel count
             if len(raw_before.ch_names) == len(raw_after.ch_names):
-                collector.add_result(subject_id, person, "âœ“", f"Channel count preserved: {len(raw_after.ch_names)}")
+                collector.add_result(subject_id, person, "OK", f"Channel count preserved: {len(raw_after.ch_names)}")
             else:
                 collector.add_result(subject_id, person, "ERROR", f"Channel count mismatch: {len(raw_before.ch_names)} -> {len(raw_after.ch_names)}")
             
             # Verify sampling rate
             if raw_before.info["sfreq"] == raw_after.info["sfreq"]:
-                collector.add_result(subject_id, person, "âœ“", f"Sampling rate preserved: {raw_after.info['sfreq']} Hz")
+                collector.add_result(subject_id, person, "OK", f"Sampling rate preserved: {raw_after.info['sfreq']} Hz")
             else:
                 collector.add_result(subject_id, person, "ERROR", f"Sampling rate changed: {raw_before.info['sfreq']} -> {raw_after.info['sfreq']}")
             
             # Verify sample count
             if raw_before.n_times == raw_after.n_times:
-                collector.add_result(subject_id, person, "âœ“", f"Sample count preserved: {raw_after.n_times}")
+                collector.add_result(subject_id, person, "OK", f"Sample count preserved: {raw_after.n_times}")
             else:
                 collector.add_result(subject_id, person, "ERROR", f"Sample count changed: {raw_before.n_times} -> {raw_after.n_times}")
             
             # Check ICA components
             if ica.n_components > 0:
-                collector.add_result(subject_id, person, "âœ“", f"ICA fitted with {ica.n_components} components")
+                collector.add_result(subject_id, person, "OK", f"ICA fitted with {ica.n_components} components")
             else:
                 collector.add_result(subject_id, person, "ERROR", "ICA has zero components")
             
@@ -137,25 +138,25 @@ def sanity_check_ica(subjects, duration, *, run_visualizations=True):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âœ“",
+                    "OK",
                     f"Removed {len(ica.exclude)}/{ica.n_components} components: {component_summary_text(component_meta, limit=20)}",
                 )
             else:
-                collector.add_result(subject_id, person, "âš ", "No components marked for removal")
+                collector.add_result(subject_id, person, "WARN", "No components marked for removal")
             
             # Compare amplitudes
             std_before, std_after, change_pct = compare_amplitudes(raw_before, raw_after, duration_s=60, pick_type="eeg")
             if not (np.isnan(std_before) or np.isnan(std_after)):
-                collector.add_result(subject_id, person, "âœ“", f"EEG amplitude: {std_before:.2f} ÂµV -> {std_after:.2f} ÂµV ({change_pct:+.1f}%)")
+                collector.add_result(subject_id, person, "OK", f"EEG amplitude: {std_before:.2f} uV -> {std_after:.2f} uV ({change_pct:+.1f}%)")
                 if change_pct > 20.0:
-                    collector.add_result(subject_id, person, "âš ", "Larger than expected amplitude increase after ICA")
+                    collector.add_result(subject_id, person, "WARN", "Larger than expected amplitude increase after ICA")
             
             # Check for NaN/Inf
             data_after = raw_after.get_data(start=0, stop=min(10000, raw_after.n_times))
             nan_count = int(np.isnan(data_after).sum())
             inf_count = int(np.isinf(data_after).sum())
             if nan_count == 0 and inf_count == 0:
-                collector.add_result(subject_id, person, "âœ“", "No NaN/Inf detected")
+                collector.add_result(subject_id, person, "OK", "No NaN/Inf detected")
             else:
                 collector.add_result(subject_id, person, "ERROR", f"Found {nan_count} NaN and {inf_count} Inf values")
 

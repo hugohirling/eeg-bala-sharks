@@ -1,4 +1,5 @@
-﻿"""
+﻿# This file's comments were created with the help of GitHub Copilot using GPT-5.3-Codex.
+"""
 Sanity Check Visualization for Step 05: Filter (Bandpass 1-40 Hz)
 
 Creates verification plots for the filtering step:
@@ -98,26 +99,26 @@ def sanity_check_filter(subjects, duration, run_visualizations=True):
                 collector.add_result(subject_id, person, "ERROR", f"Cannot load files: {exc}")
                 continue
 
-            collector.add_result(subject_id, person, "âœ“", "Files exist")
+            collector.add_result(subject_id, person, "OK", "Files exist")
             if len(raw_before.ch_names) == len(raw_after.ch_names):
-                collector.add_result(subject_id, person, "âœ“", f"Channel count preserved: {len(raw_after.ch_names)}")
+                collector.add_result(subject_id, person, "OK", f"Channel count preserved: {len(raw_after.ch_names)}")
             else:
                 collector.add_result(subject_id, person, "ERROR", f"Channel count mismatch: {len(raw_before.ch_names)} -> {len(raw_after.ch_names)}")
             if raw_before.info["sfreq"] == raw_after.info["sfreq"]:
-                collector.add_result(subject_id, person, "âœ“", f"Sampling rate preserved: {raw_after.info['sfreq']} Hz")
+                collector.add_result(subject_id, person, "OK", f"Sampling rate preserved: {raw_after.info['sfreq']} Hz")
             else:
                 collector.add_result(subject_id, person, "ERROR", f"Sampling rate changed: {raw_before.info['sfreq']} -> {raw_after.info['sfreq']}")
             if raw_before.n_times == raw_after.n_times:
-                collector.add_result(subject_id, person, "âœ“", f"Sample count preserved: {raw_after.n_times}")
+                collector.add_result(subject_id, person, "OK", f"Sample count preserved: {raw_after.n_times}")
             else:
                 collector.add_result(subject_id, person, "ERROR", f"Sample count changed: {raw_before.n_times} -> {raw_after.n_times}")
 
             std_before, std_after, change_pct = compare_amplitudes(raw_before, raw_after, duration_s=60, pick_type="eeg")
             if not (np.isnan(std_before) or np.isnan(std_after)):
-                collector.add_result(subject_id, person, "âœ“", f"EEG amplitude: {std_before:.2f} ÂµV -> {std_after:.2f} ÂµV ({change_pct:+.1f}%)")
+                collector.add_result(subject_id, person, "OK", f"EEG amplitude: {std_before:.2f} uV -> {std_after:.2f} uV ({change_pct:+.1f}%)")
                 anomaly = detect_amplitude_anomaly(change_pct, threshold_pct=50)
                 if anomaly:
-                    collector.add_result(subject_id, person, "âš ", anomaly)
+                    collector.add_result(subject_id, person, "WARN", anomaly)
 
             freqs_before, mean_before, _, _ = _compute_psd(raw_before, duration)
             freqs_after, mean_after, _, _ = _compute_psd(raw_after, duration)
@@ -132,17 +133,17 @@ def sanity_check_filter(subjects, duration, run_visualizations=True):
                     low_change = (low_after - low_before) / low_before * 100.0
                     pass_change = (pass_after - pass_before) / pass_before * 100.0
                     high_change = (high_after - high_before) / high_before * 100.0
-                    collector.add_result(subject_id, person, "âœ“", f"Bandpower change low/pass/high: {low_change:+.1f}% / {pass_change:+.1f}% / {high_change:+.1f}%")
+                    collector.add_result(subject_id, person, "OK", f"Bandpower change low/pass/high: {low_change:+.1f}% / {pass_change:+.1f}% / {high_change:+.1f}%")
                     if low_change > -20.0:
-                        collector.add_result(subject_id, person, "âš ", "Weak attenuation below 1 Hz")
+                        collector.add_result(subject_id, person, "WARN", "Weak attenuation below 1 Hz")
                     if high_change > -20.0:
-                        collector.add_result(subject_id, person, "âš ", "Weak attenuation above 40 Hz")
+                        collector.add_result(subject_id, person, "WARN", "Weak attenuation above 40 Hz")
 
             data_after = raw_after.get_data(start=0, stop=min(10000, raw_after.n_times))
             nan_count = int(np.isnan(data_after).sum())
             inf_count = int(np.isinf(data_after).sum())
             if nan_count == 0 and inf_count == 0:
-                collector.add_result(subject_id, person, "âœ“", "No NaN/Inf detected")
+                collector.add_result(subject_id, person, "OK", "No NaN/Inf detected")
             else:
                 collector.add_result(subject_id, person, "ERROR", f"Found {nan_count} NaN and {inf_count} Inf values")
 
@@ -155,7 +156,7 @@ def sanity_check_filter(subjects, duration, run_visualizations=True):
     collector.print_summary()
     output_csv = config.QC_DIR / "sc_05_filter_summary.csv"
     collector.export_csv(output_csv)
-    print(f"\nâœ“ Summary exported to {output_csv.name}\n")
+    print(f"\nOK Summary exported to {output_csv.name}\n")
 
 
 def main(argv=None):

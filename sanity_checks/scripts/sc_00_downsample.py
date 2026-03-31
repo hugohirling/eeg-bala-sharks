@@ -1,11 +1,12 @@
-﻿"""
+﻿# This file's comments were created with the help of GitHub Copilot using GPT-5.3-Codex.
+"""
 Sanity Check for Step 00: Downsample
 
-Ueberprueft:
-- Downsampling erfolgreich durchgefuehrt
-- Sampling Rate korrekt reduziert
-- Datenlaenge und -groesse stimmen
-- Keine Artefakte durch Downsampling
+Checks:
+- Downsampling was applied successfully
+- Sampling rate was reduced correctly
+- Data duration and size are plausible
+- No obvious artifacts were introduced by downsampling
 
 REASONING:
 - Purpose: verify that the memory-saving resampling step preserves the analyzable EEG time course.
@@ -80,7 +81,7 @@ def sanity_check_downsample(subjects):
         collector.add_result(
             subject_id,
             "P1",
-            "âœ“",
+                "OK",
             f"Sampling rate: {original_sfreq:.1f} Hz -> {downsampled_sfreq:.1f} Hz ({original_sfreq / downsampled_sfreq:.1f}x)",
             category="metadata",
             rationale=seems_correct_because("the downsampled file should expose a lower sfreq while retaining the same recording content"),
@@ -92,7 +93,7 @@ def sanity_check_downsample(subjects):
             collector.add_result(
                 subject_id,
                 "P1",
-                "âš ",
+                "WARN",
                 f"Expected {expected_sfreq} Hz, got {downsampled_sfreq} Hz",
                 category="metadata",
                 rationale=strange_because("a mismatching sampling rate changes the effective Nyquist limit and weakens reproducibility across machines"),
@@ -103,7 +104,7 @@ def sanity_check_downsample(subjects):
             collector.add_result(
                 subject_id,
                 "P1",
-                "âœ“",
+                "OK",
                 f"Channel count preserved: {len(raw_downsampled.ch_names)}",
                 category="structure",
                 rationale=seems_correct_because("resampling should change temporal resolution, not the recorded channel set"),
@@ -126,7 +127,7 @@ def sanity_check_downsample(subjects):
             collector.add_result(
                 subject_id,
                 "P1",
-                "âœ“",
+                "OK",
                 f"Duration preserved within tolerance: {original_duration:.2f}s vs {downsampled_duration:.2f}s (delta {duration_diff:.4f}s)",
                 category="temporal_integrity",
                 rationale=seems_correct_because("the recording should span the same time interval after resampling, aside from rounding at sample boundaries"),
@@ -136,7 +137,7 @@ def sanity_check_downsample(subjects):
             collector.add_result(
                 subject_id,
                 "P1",
-                "âš ",
+                "WARN",
                 f"Duration changed more than expected: {original_duration:.2f}s vs {downsampled_duration:.2f}s (delta {duration_diff:.4f}s)",
                 category="temporal_integrity",
                 rationale=strange_because("a larger duration shift suggests dropped or duplicated samples during resampling"),
@@ -151,7 +152,7 @@ def sanity_check_downsample(subjects):
         collector.add_result(
             subject_id,
             "P1",
-            "âœ“",
+            "OK",
             f"Estimated size: {original_est_size:.2f} MB -> {downsampled_est_size:.2f} MB ({size_ratio:.1f}% of original)",
             category="efficiency",
             rationale=seems_correct_because("the file size should shrink roughly in proportion to the lower sample count, which is the main motivation for downsampling early"),
@@ -160,7 +161,7 @@ def sanity_check_downsample(subjects):
     collector.print_summary()
     output_csv = config.QC_DIR / "sc_00_downsample_summary.csv"
     collector.export_csv(output_csv)
-    print(f"\nâœ“ Summary exported to {output_csv.name}\n")
+    print(f"\nOK Summary exported to {output_csv.name}\n")
 
 
 def run_visualizations(subjects, duration):

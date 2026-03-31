@@ -1,11 +1,12 @@
-﻿"""
+﻿# This file's comments were created with the help of GitHub Copilot using GPT-5.3-Codex.
+"""
 Sanity Check for Step 01: Split Players
 
-Ueberprueft:
-- Spieler korrekt aufgeteilt
-- Kanaele pro Person korrekt zugeordnet
-- Kanal-Typen gesetzt
-- Status-Kanal vorhanden fuer beide
+Checks:
+- Player streams are split correctly
+- Channels are assigned to the correct player
+- Channel types are set correctly
+- Status channel is present for both players
 
 REASONING:
 - Purpose: verify that the dyadic recording is split into two analyzable player streams without channel leakage.
@@ -61,7 +62,7 @@ def sanity_check_split_players(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"File exists with {len(raw.ch_names)} total channels: {path.name}",
                 category="file_io",
                 rationale=seems_correct_because("the split stage should materialize a dedicated FIF file for each player stream"),
@@ -77,7 +78,7 @@ def sanity_check_split_players(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"Channel types EEG/EOG/RESP/MISC/STIM = {len(eeg_picks)}/{len(eog_picks)}/{len(resp_picks)}/{len(misc_picks)}/{len(stim_picks)}",
                 category="channel_types",
                 rationale=seems_correct_because("downstream artifact handling and event extraction rely on these types being preserved after the split"),
@@ -87,7 +88,7 @@ def sanity_check_split_players(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âš ",
+                    "WARN",
                     "No stim channel found",
                     category="events",
                     rationale=strange_because("epoching later depends on event information, and a missing stim/status stream can make trials irrecoverable"),
@@ -99,7 +100,7 @@ def sanity_check_split_players(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âš ",
+                    "WARN",
                     f"{ch_count_with_prefix} channels still have prefix '{prefix}'",
                     category="naming",
                     rationale=strange_because("prefix remnants suggest the split output is not normalized for the rename/montage step"),
@@ -108,7 +109,7 @@ def sanity_check_split_players(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âœ“",
+                    "OK",
                     f"Prefix '{prefix}' removed from EEG channels",
                     category="naming",
                     rationale=seems_correct_because("the split output should contain player-local channel names that can be mapped to BioSemi labels without extra string handling"),
@@ -117,7 +118,7 @@ def sanity_check_split_players(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"Sampling rate {raw.info['sfreq']} Hz, duration {raw.times[-1]:.2f}s",
                 category="temporal_integrity",
                 rationale=seems_correct_because("splitting is expected to preserve the original timing so both players remain trial-synchronized"),
@@ -126,7 +127,7 @@ def sanity_check_split_players(subjects):
     collector.print_summary()
     output_csv = config.QC_DIR / "sc_01_split_players_summary.csv"
     collector.export_csv(output_csv)
-    print(f"\nâœ“ Summary exported to {output_csv.name}\n")
+    print(f"\nOK Summary exported to {output_csv.name}\n")
 
 
 def run_visualizations(subjects):

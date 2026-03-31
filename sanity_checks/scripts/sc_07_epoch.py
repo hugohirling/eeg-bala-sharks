@@ -1,13 +1,14 @@
-﻿"""
+﻿# This file's comments were created with the help of GitHub Copilot using GPT-5.3-Codex.
+"""
 Sanity Check for Step 07: Epoching
 
-Ueberprueft:
-- Epochs erfolgreich erstellt
-- Event-Anzahl und -Typen plausibel
-- Epoch-Groesse und Dimensionen
-- Baseline-Korrektur vorhanden
-- Keine NaN/Inf-Werte
-- Anomalie-Detektion: zu wenige/viele Epochs
+Checks:
+- Epochs are created successfully
+- Event counts and event types are plausible
+- Epoch dimensions are valid
+- Baseline correction is present
+- No NaN/Inf values are present
+- Anomaly detection for too few or too many epochs
 
 REASONING:
 - Purpose: ensure that continuous recordings were segmented into analysis-ready trials with the expected timing and event structure.
@@ -90,7 +91,7 @@ def sanity_check_epoch(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 "Files exist",
                 category="file_io",
                 rationale=seems_correct_because("the epoch file and its source continuous file are both available for direct comparison"),
@@ -98,7 +99,7 @@ def sanity_check_epoch(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"Number of epochs: {len(epochs)}",
                 category="events",
                 rationale=seems_correct_because("epoch count is the first quick proxy for whether event extraction behaved sensibly"),
@@ -118,7 +119,7 @@ def sanity_check_epoch(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âš ",
+                    "WARN",
                     f"Very few epochs ({len(epochs)} < 10)",
                     category="events",
                     rationale=strange_because("such a low count often reflects missing triggers or an incomplete recording rather than a normal participant"),
@@ -127,7 +128,7 @@ def sanity_check_epoch(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âš ",
+                    "WARN",
                     f"Epoch count exceeds MAX_EPOCHS ({len(epochs)} > {config.MAX_EPOCHS})",
                     category="events",
                     rationale=strange_because("too many epochs can indicate duplicate triggers or overly broad event inclusion criteria"),
@@ -137,7 +138,7 @@ def sanity_check_epoch(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âœ“",
+                    "OK",
                     "Epoch count within expected range",
                     category="events",
                     rationale=seems_correct_because("the number of extracted trials is plausible for the task and recording length"),
@@ -149,7 +150,7 @@ def sanity_check_epoch(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âœ“",
+                    "OK",
                     f"Event types found: {', '.join(event_types)}",
                     category="events",
                     rationale=seems_correct_because("a non-empty event dictionary is required for interpretable condition-wise analyses"),
@@ -173,7 +174,7 @@ def sanity_check_epoch(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"Time window: [{tmin_actual:.3f}, {tmax_actual:.3f}] s (expected {expected_duration:.3f} s)",
                 category="temporal_integrity",
                 rationale=seems_correct_because("the epoch span should match the analysis window defined in the preprocessing config"),
@@ -184,7 +185,7 @@ def sanity_check_epoch(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âš ",
+                    "WARN",
                     f"Duration mismatch: {actual_duration:.3f} vs {expected_duration:.3f} s",
                     category="temporal_integrity",
                     rationale=strange_because("a changed epoch length would alter the baseline and post-event windows used for later decoding"),
@@ -195,7 +196,7 @@ def sanity_check_epoch(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"Sampling rate: {sfreq} Hz",
                 category="metadata",
                 rationale=seems_correct_because("epoching should preserve the sampling rate of the continuous input unless an explicit resampling step is documented"),
@@ -207,7 +208,7 @@ def sanity_check_epoch(subjects):
             collector.add_result(
                 subject_id,
                 person,
-                "âœ“",
+                "OK",
                 f"Dimensions: ({len(epochs)} epochs, {n_channels} channels, {n_samples} samples)",
                 category="structure",
                 rationale=seems_correct_because("explicit array dimensions make it easier to verify that later decoding sees the expected trial-by-channel-by-time structure"),
@@ -218,7 +219,7 @@ def sanity_check_epoch(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âœ“",
+                    "OK",
                     f"Baseline period: {epochs.baseline}",
                     category="baseline",
                     rationale=seems_correct_because("documenting the baseline window clarifies which part of each trial anchors amplitude comparisons"),
@@ -227,7 +228,7 @@ def sanity_check_epoch(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âš ",
+                    "WARN",
                     "No baseline correction applied",
                     category="baseline",
                     rationale=strange_because("without a baseline, between-trial amplitude shifts can become harder to interpret"),
@@ -239,7 +240,7 @@ def sanity_check_epoch(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âœ“",
+                    "OK",
                     "No bad channels marked",
                     category="signal_quality",
                     rationale=seems_correct_because("by the epoching stage, repaired channels should usually already be back in the usable sensor set"),
@@ -249,7 +250,7 @@ def sanity_check_epoch(subjects):
                 collector.add_result(
                     subject_id,
                     person,
-                    "âš ",
+                    "WARN",
                     f"Bad channels marked: {len(bads)}/{n_channels} ({bad_pct:.1f}%)",
                     category="signal_quality",
                     rationale=strange_because("persistent bad channels at this late stage may mean they were intentionally excluded or not fully repaired"),
@@ -265,7 +266,7 @@ def sanity_check_epoch(subjects):
                     collector.add_result(
                         subject_id,
                         person,
-                        "âœ“",
+                        "OK",
                         "No NaN/Inf values",
                         category="data_integrity",
                         rationale=seems_correct_because("numerically valid epoch arrays are a hard prerequisite for all later statistics and decoding models"),
@@ -287,8 +288,8 @@ def sanity_check_epoch(subjects):
                     collector.add_result(
                         subject_id,
                         person,
-                        "âš ",
-                        f"Large amplitude detected: {max_val*1e6:.0f} ÂµV (possible artifact)",
+                        "WARN",
+                        f"Large amplitude detected: {max_val*1e6:.0f} uV (possible artifact)",
                         category="signal_quality",
                         rationale=strange_because("very large voltages after preprocessing often indicate remaining artifacts or a scaling problem"),
                     )
@@ -298,7 +299,7 @@ def sanity_check_epoch(subjects):
     # Export summary CSV
     output_csv = config.QC_DIR / "sc_07_epoch_summary.csv"
     collector.export_csv(output_csv)
-    print(f"\nâœ“ Summary exported to {output_csv.name}\n")
+    print(f"\nOK Summary exported to {output_csv.name}\n")
 
 
 def run_visualizations(subjects):
