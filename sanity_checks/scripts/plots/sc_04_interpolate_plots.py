@@ -1,17 +1,22 @@
-"""
-Sanity Check Visualization for Step 04: Interpolate Bad Channels
+﻿"""
+Sanity Check Plot Module for Step 04: Interpolate Bad Channels
 
 Creates visualization plots for bad channel interpolation:
 - Interpolated channel time series comparison
 - Step-03-style all-channel before/after comparison
 - Step-03-style bad-channel + neighbor before/after comparison
 
-Usage:
-    python sanity_checks/scripts/sc_04_interpolate_viz.py [--subjects 01,02] [--duration 30]
+Entry point:
+    python sanity_checks/scripts/sc_04_interpolate.py --mode viz
 
 Options:
     --subjects: Comma-separated subject IDs (default: first 2)
     --duration: Duration in seconds to plot (default: 30)
+
+REASONING:
+- Purpose: show whether repaired channels now resemble their spatial neighbors without changing the rest of the montage.
+- Reproducibility: the comparison always uses the stored before/after FIF pair for the same subject/person.
+- Interpretation focus: the expected argument is "This seems correct because the interpolated trace moves closer to neighboring channels while the overall recording structure stays unchanged."
 """
 
 import argparse
@@ -28,47 +33,30 @@ if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
 from preprocessing import config
+from helpers.sc_cli import add_duration_argument, add_subjects_argument, resolve_subjects
+from helpers.sc_config import DEFAULT_PERSONS, FIXED_ABS_SCALE_UV, INTERPOLATE_VIZ, VIZ_NEUTRAL
+from helpers.sc_plot_io import save_figure
 
 
-COLOR_BEFORE = "#d62728"
-COLOR_AFTER = "#006d2c"
-COLOR_NEIGHBOR = "#4d4d4d"
-COLOR_DELTA = "#5a5a5a"
-COLOR_GOOD = "black"
-FIXED_ABS_SCALE_UV = 50.949631
+COLOR_BEFORE = INTERPOLATE_VIZ["before"]
+COLOR_AFTER = INTERPOLATE_VIZ["after"]
+COLOR_NEIGHBOR = INTERPOLATE_VIZ["neighbor"]
+COLOR_DELTA = INTERPOLATE_VIZ["delta"]
+COLOR_GOOD = INTERPOLATE_VIZ["good"]
+COLOR_BEFORE_SOFT = INTERPOLATE_VIZ["before_soft"]
+COLOR_AFTER_SOFT = INTERPOLATE_VIZ["after_soft"]
+COLOR_AFTER_STRONG = INTERPOLATE_VIZ["after_strong"]
+COLOR_BAD_EDGE = VIZ_NEUTRAL["text_mid"]
+# Shared scale keeps before/after overlay plots directly comparable instead of adapting the y-axis per recording.
 
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="Visualize bad channel interpolation effects (before/after restoration)",
     )
-    parser.add_argument(
-        "--subjects",
-        type=str,
-        default=None,
-        help="Comma-separated subject IDs. Default: first 2.",
-    )
-    parser.add_argument(
-        "--duration",
-        type=int,
-        default=30,
-        help="Duration in seconds to plot (default: 30)",
-    )
-    return parser.parse_args()
-
-
-def _normalize_subject_id(subject_id):
-    """Return subject IDs in the zero-padded format used on disk."""
-    value = str(subject_id).strip()
-    if not value:
-        return value
-    return value.zfill(2) if value.isdigit() else value
-
-
-def get_subjects(subject_str):
-    if subject_str:
-        return [_normalize_subject_id(part) for part in subject_str.split(",") if part.strip()]
-    return [_normalize_subject_id(subject_id) for subject_id in list(config.SUBJECTS)[:2]]
+    add_subjects_argument(parser)
+    add_duration_argument(parser, default=30)
+    return parser.parse_args(argv)
 
 
 def _get_channel_locations(raw):
@@ -161,7 +149,6 @@ def plot_interpolation_channel_overlay_comparison(raw_before, raw_after, subject
         ),
     ]
 
-    output_dir.mkdir(parents=True, exist_ok=True)
     for times, data_abs, highlight_color, title, plot_path in stage_specs:
         fig, ax = plt.subplots(1, 1, figsize=(16, 10))
         for idx, ch_name in enumerate(ch_names):
@@ -200,9 +187,9 @@ def plot_interpolation_channel_overlay_comparison(raw_before, raw_after, subject
             fontweight="bold",
         )
         plt.tight_layout(rect=[0, 0, 0.94, 0.96])
-        fig.savefig(plot_path, dpi=140)
+        plot_path = save_figure(fig, output_dir, plot_path.name, dpi=140, bbox_inches=None)
         plt.close(fig)
-        print(f"  ✓ Step-03-style overview comparison saved: {plot_path.name}")
+        print(f"  âœ“ Step-03-style overview comparison saved: {plot_path.name}")
 
 
 def plot_interpolation_neighbor_comparison(raw_before, raw_after, subject_id, person, output_dir, duration_sec=1.0):
@@ -300,11 +287,15 @@ def plot_interpolation_neighbor_comparison(raw_before, raw_after, subject_id, pe
     )
     plt.tight_layout(rect=[0, 0, 0.90, 0.96])
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = output_dir / f"sub-{subject_id}_{person}_interpolate_vs_bad_channels_neighbors.png"
-    fig.savefig(plot_path, dpi=140, bbox_inches="tight", pad_inches=0.06)
+    plot_path = save_figure(
+        fig,
+        output_dir,
+        f"sub-{subject_id}_{person}_interpolate_vs_bad_channels_neighbors.png",
+        dpi=140,
+        pad_inches=0.06,
+    )
     plt.close(fig)
-    print(f"  ✓ Step-03-style neighbor comparison saved: {plot_path.name}")
+    print(f"  âœ“ Step-03-style neighbor comparison saved: {plot_path.name}")
 
 
 def _smooth_for_display(signal_1d, sfreq, window_ms=8.0):
@@ -353,11 +344,9 @@ def plot_montage_comparison(raw_before, raw_after, subject_id, person, output_di
         fig.suptitle(f"sub-{subject_id} {person} - Sensor Layout Comparison (Interpolation)")
         plt.tight_layout()
 
-        output_dir.mkdir(parents=True, exist_ok=True)
-        plot_path = output_dir / f"sub-{subject_id}_{person}_interpolate_montage_comparison.png"
-        fig.savefig(plot_path, dpi=150, bbox_inches="tight")
+        plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_interpolate_montage_comparison.png", dpi=150)
         plt.close(fig)
-        print(f"  ✓ Montage comparison saved: {plot_path.name}")
+        print(f"  âœ“ Montage comparison saved: {plot_path.name}")
 
     except Exception as e:
         print(f"  WARNING: Could not create montage comparison: {e}")
@@ -414,16 +403,16 @@ def plot_interpolated_channels_timeseries(raw_before, raw_after, subject_id, per
         ax_trace.plot(times_before, trace_before_uv, label="Before interpolation", linewidth=0.95, color=COLOR_BEFORE, linestyle="-", alpha=0.9)
         ax_trace.plot(times_after, trace_after_uv, label="After interpolation", linewidth=0.95, color=COLOR_AFTER, alpha=0.95, zorder=3)
 
-        ax_trace.set_ylabel(f"{ch_name}\nCentered amplitude (µV)", fontsize=10.5, fontweight="bold")
+        ax_trace.set_ylabel(f"{ch_name}\nCentered amplitude (ÂµV)", fontsize=10.5, fontweight="bold")
         ax_trace.set_xlim([0, t_end])
         ax_trace.grid(alpha=0.3, linestyle=":")
-        ax_trace.set_facecolor("#f5f5f5" if plot_idx % 2 == 0 else "white")
+        ax_trace.set_facecolor(INTERPOLATE_VIZ["trace_even_face"] if plot_idx % 2 == 0 else INTERPOLATE_VIZ["trace_odd_face"])
 
         ax_delta.plot(times_after, delta_uv, color=COLOR_DELTA, linewidth=0.95)
-        ax_delta.axhline(0.0, color="#555555", linestyle="--", linewidth=1.1, alpha=0.8)
+        ax_delta.axhline(0.0, color=VIZ_NEUTRAL["marker_edge"], linestyle="--", linewidth=1.1, alpha=0.8)
         ax_delta.grid(alpha=0.25, linestyle=":")
         ax_delta.set_xlim([0, t_end])
-        ax_delta.set_ylabel("After - before\n(µV)", fontsize=9.5)
+        ax_delta.set_ylabel("After - before\n(ÂµV)", fontsize=9.5)
         std_before_uv = float(np.std(trace_before_uv))
         std_after_uv = float(np.std(trace_after_uv))
         info_lines = [
@@ -438,7 +427,12 @@ def plot_interpolated_channels_timeseries(raw_before, raw_after, subject_id, per
             ha="left",
             va="top",
             fontsize=9,
-            bbox=dict(boxstyle="round,pad=0.35", facecolor="white", edgecolor="#777777", alpha=0.9),
+            bbox=dict(
+                boxstyle="round,pad=0.35",
+                facecolor=INTERPOLATE_VIZ["note_face"],
+                edgecolor=INTERPOLATE_VIZ["note_edge"],
+                alpha=0.9,
+            ),
         )
 
         if plot_idx == len(bad_indices_to_plot) - 1:
@@ -451,18 +445,16 @@ def plot_interpolated_channels_timeseries(raw_before, raw_after, subject_id, per
                 f"Before vs after only ({len(bads)} total bad channels, centered per trace)",
                 fontsize=12,
                 fontweight="bold",
-                color="black",
+                color=VIZ_NEUTRAL["black"],
             )
             ax_delta.set_title("Change caused by interpolation", fontsize=11, fontweight="bold")
             ax_trace.legend(loc="upper right", fontsize=9.5)
 
     plt.tight_layout()
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = output_dir / f"sub-{subject_id}_{person}_interpolate_timeseries.png"
-    fig.savefig(plot_path, dpi=150, bbox_inches="tight")
+    plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_interpolate_timeseries.png", dpi=150)
     plt.close(fig)
-    print(f"  ✓ Interpolated channels time series saved: {plot_path.name}")
+    print(f"  âœ“ Interpolated channels time series saved: {plot_path.name}")
 
 
 def plot_bad_channel_restoration_summary(raw_before, raw_after, subject_id, person, output_dir):
@@ -501,14 +493,14 @@ def plot_bad_channel_restoration_summary(raw_before, raw_after, subject_id, pers
     axes[0].bar(x + width, neighbor_std, width, color=COLOR_NEIGHBOR, alpha=0.85, label="Nearest clean-channel mean")
     axes[0].set_xticks(x)
     axes[0].set_xticklabels(channel_labels)
-    axes[0].set_ylabel("STD (µV)")
+    axes[0].set_ylabel("STD (ÂµV)")
     axes[0].set_title("STD before vs after interpolation, with clean-neighbor reference")
     axes[0].grid(axis="y", alpha=0.3)
     axes[0].legend(fontsize=9.5)
 
     restoration_delta = after_std - before_std
     target_delta = after_std - neighbor_std
-    axes[1].axhline(0.0, color="#555555", linestyle="--", linewidth=1.1)
+    axes[1].axhline(0.0, color=VIZ_NEUTRAL["marker_edge"], linestyle="--", linewidth=1.1)
     axes[1].plot(
         x,
         restoration_delta,
@@ -528,7 +520,7 @@ def plot_bad_channel_restoration_summary(raw_before, raw_after, subject_id, pers
     )
     axes[1].set_xticks(x)
     axes[1].set_xticklabels(channel_labels)
-    axes[1].set_ylabel("STD difference (µV)")
+    axes[1].set_ylabel("STD difference (ÂµV)")
     axes[1].set_xlabel("Interpolated channel")
     axes[1].set_title("Difference of interpolated-channel STD relative to each reference")
     axes[1].grid(alpha=0.3)
@@ -537,11 +529,9 @@ def plot_bad_channel_restoration_summary(raw_before, raw_after, subject_id, pers
     fig.suptitle(f"sub-{subject_id} {person} - Bad Channel Restoration Summary", fontsize=14, fontweight="bold")
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = output_dir / f"sub-{subject_id}_{person}_interpolate_bad_channel_restoration.png"
-    fig.savefig(plot_path, dpi=150, bbox_inches="tight")
+    plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_interpolate_bad_channel_restoration.png", dpi=150)
     plt.close(fig)
-    print(f"  ✓ Bad channel restoration summary saved: {plot_path.name}")
+    print(f"  âœ“ Bad channel restoration summary saved: {plot_path.name}")
 
 
 def plot_amplitude_statistics_comparison(raw_before, raw_after, subject_id, person, output_dir):
@@ -568,18 +558,18 @@ def plot_amplitude_statistics_comparison(raw_before, raw_after, subject_id, pers
     # Std distribution (top left)
     ax1 = plt.subplot(2, 2, 1)
     ax1.hist(std_before, bins=15, alpha=0.6, label="Before Interpolation", 
-            color="#ff7f0e", edgecolor="black", linewidth=1.2)
+            color=COLOR_BEFORE_SOFT, edgecolor=VIZ_NEUTRAL["black"], linewidth=1.2)
     ax1.hist(std_after, bins=15, alpha=0.6, label="After Interpolation",
-            color="#1f77b4", edgecolor="black", linewidth=1.2)
-    ax1.set_xlabel("Standard Deviation (µV)", fontsize=11, fontweight="bold")
+            color=COLOR_AFTER_SOFT, edgecolor=VIZ_NEUTRAL["black"], linewidth=1.2)
+    ax1.set_xlabel("Standard Deviation (ÂµV)", fontsize=11, fontweight="bold")
     ax1.set_ylabel("Channel Count", fontsize=11, fontweight="bold")
     ax1.set_title("Amplitude Distribution\n(Red channels pushed into normal range)", fontsize=11, fontweight="bold")
     ax1.legend(fontsize=10)
     ax1.grid(alpha=0.3, axis="y")
     
     # Mark mean lines
-    ax1.axvline(np.mean(std_before), color="#ff7f0e", linestyle="--", linewidth=2, alpha=0.7, label=f"Mean (before): {np.mean(std_before):.1f} µV")
-    ax1.axvline(np.mean(std_after), color="#1f77b4", linestyle="--", linewidth=2, alpha=0.7, label=f"Mean (after): {np.mean(std_after):.1f} µV")
+    ax1.axvline(np.mean(std_before), color=COLOR_BEFORE_SOFT, linestyle="--", linewidth=2, alpha=0.7, label=f"Mean (before): {np.mean(std_before):.1f} ÂµV")
+    ax1.axvline(np.mean(std_after), color=COLOR_AFTER_SOFT, linestyle="--", linewidth=2, alpha=0.7, label=f"Mean (after): {np.mean(std_after):.1f} ÂµV")
 
     # Per-channel scatter with bad channel highlighting (top right)
     ax2 = plt.subplot(2, 2, 2)
@@ -591,27 +581,27 @@ def plot_amplitude_statistics_comparison(raw_before, raw_after, subject_id, pers
     # Plot good channels (BEFORE)
     if np.any(good_mask):
         ax2.scatter(channel_indices[good_mask], std_before[good_mask], 
-                  s=60, c="#ff7f0e", alpha=0.6, edgecolor="black", linewidth=1, label="Good channels (before)")
+                  s=60, c=COLOR_BEFORE_SOFT, alpha=0.6, edgecolor=VIZ_NEUTRAL["black"], linewidth=1, label="Good channels (before)")
 
-    # Plot bad/interpolated channels (BEFORE) — PROMINENTLY MARKED
+    # Plot bad/interpolated channels (BEFORE) â€” PROMINENTLY MARKED
     if np.any(interpolated_mask):
         ax2.scatter(channel_indices[interpolated_mask], std_before[interpolated_mask], 
-                  s=250, c="#d62728", marker="X", linewidth=3, edgecolor="darkred", label="Interpolated channels (before)", zorder=5)
+                  s=250, c=COLOR_BEFORE, marker="X", linewidth=3, edgecolor=COLOR_BAD_EDGE, label="Interpolated channels (before)", zorder=5)
         # Draw attention circles
         for idx in np.where(interpolated_mask)[0]:
-            circle = plt.Circle((idx, std_before[idx]), 2.5, fill=False, edgecolor="#d62728", linewidth=2.5, linestyle="--")
+            circle = plt.Circle((idx, std_before[idx]), 2.5, fill=False, edgecolor=COLOR_BEFORE, linewidth=2.5, linestyle="--")
             ax2.add_patch(circle)
 
     # Overlay AFTER values as smaller dots
     ax2.scatter(channel_indices[good_mask], std_after[good_mask], 
-              s=40, c="#1f77b4", alpha=0.7, edgecolor="none", marker="^")
+              s=40, c=COLOR_AFTER_SOFT, alpha=0.7, edgecolor="none", marker="^")
     if np.any(interpolated_mask):
         ax2.scatter(channel_indices[interpolated_mask], std_after[interpolated_mask], 
-                  s=120, c="#2ca02c", alpha=0.8, edgecolor="black", linewidth=2, marker="o", label="Interpolated channels (after)", zorder=4)
+                  s=120, c=COLOR_AFTER_STRONG, alpha=0.8, edgecolor=VIZ_NEUTRAL["black"], linewidth=2, marker="o", label="Interpolated channels (after)", zorder=4)
 
     ax2.set_xlabel("Channel Index", fontsize=11, fontweight="bold")
-    ax2.set_ylabel("Std (µV)", fontsize=11, fontweight="bold")
-    ax2.set_title("Per-Channel Amplitude: Before vs After\n(Red X → Green circle = successful interpolation)", 
+    ax2.set_ylabel("Std (ÂµV)", fontsize=11, fontweight="bold")
+    ax2.set_title("Per-Channel Amplitude: Before vs After\n(Red X â†’ Green circle = successful interpolation)", 
                  fontsize=11, fontweight="bold")
     ax2.legend(fontsize=9, loc="upper left")
     ax2.grid(alpha=0.3)
@@ -622,21 +612,21 @@ def plot_amplitude_statistics_comparison(raw_before, raw_after, subject_id, pers
     n_total = len(eeg_picks_before)
     
     if n_bad > 0:
-        labels = [f"✓ Good\n({n_total - n_bad})", f"✓ Interpolated\n({n_bad})"]
+        labels = [f"âœ“ Good\n({n_total - n_bad})", f"âœ“ Interpolated\n({n_bad})"]
         sizes = [n_total - n_bad, n_bad]
-        colors_pie = ["#ff7f0e", "#2ca02c"]
+        colors_pie = [COLOR_BEFORE_SOFT, COLOR_AFTER_STRONG]
         explode = (0, 0.1)
         
         wedges, texts, autotexts = ax3.pie(sizes, explode=explode, labels=labels, colors=colors_pie, 
                                            autopct="%1.1f%%", shadow=True, startangle=90, 
                                            textprops={"fontsize": 11, "fontweight": "bold"})
         for autotext in autotexts:
-            autotext.set_color("white")
+            autotext.set_color(VIZ_NEUTRAL["white"])
             autotext.set_fontsize(11)
         
-        ax3.set_title(f"Channel Status After Interpolation\n(All channels now usable!)", fontsize=11, fontweight="bold", color="#2ca02c")
+        ax3.set_title(f"Channel Status After Interpolation\n(All channels now usable!)", fontsize=11, fontweight="bold", color=COLOR_AFTER_STRONG)
     else:
-        ax3.text(0.5, 0.5, f"✓ No Bad Channels\nAll {n_total} channels intact", 
+        ax3.text(0.5, 0.5, f"âœ“ No Bad Channels\nAll {n_total} channels intact", 
                 ha="center", va="center", fontsize=12, transform=ax3.transAxes, fontweight="bold")
         ax3.axis("off")
 
@@ -647,19 +637,19 @@ def plot_amplitude_statistics_comparison(raw_before, raw_after, subject_id, pers
     summary_text += f"Total EEG Channels: {n_total}\n"
     summary_text += f"Bad Channels (interpolated): {n_bad}\n"
     summary_text += f"Good Channels: {n_total - n_bad}\n\n"
-    summary_text += f"━ Mean Amplitude (Before): {np.mean(std_before):.2f} µV\n"
-    summary_text += f"━ Mean Amplitude (After): {np.mean(std_after):.2f} µV\n"
-    summary_text += f"Δ Change: {np.mean(std_after) - np.mean(std_before):+.2f} µV\n\n"
+    summary_text += f"â” Mean Amplitude (Before): {np.mean(std_before):.2f} ÂµV\n"
+    summary_text += f"â” Mean Amplitude (After): {np.mean(std_after):.2f} ÂµV\n"
+    summary_text += f"Î” Change: {np.mean(std_after) - np.mean(std_before):+.2f} ÂµV\n\n"
     
     if n_bad > 0:
-        summary_text += f"━ Method: Spherical Spline Interpolation\n"
-        summary_text += f"✓ All channels now ready for analysis!"
-        bg_color = "#e6ffe6"
-        edge_color = "#2ca02c"
+        summary_text += f"â” Method: Spherical Spline Interpolation\n"
+        summary_text += f"âœ“ All channels now ready for analysis!"
+        bg_color = INTERPOLATE_VIZ["success_face"]
+        edge_color = INTERPOLATE_VIZ["success_edge"]
     else:
-        summary_text += "✓ No interpolation needed"
-        bg_color = "#e8f4f8"
-        edge_color = "#1f77b4"
+        summary_text += "âœ“ No interpolation needed"
+        bg_color = INTERPOLATE_VIZ["info_face"]
+        edge_color = INTERPOLATE_VIZ["info_edge"]
     
     ax4.text(0.05, 0.95, summary_text, transform=ax4.transAxes,
             fontsize=11, verticalalignment="top", family="monospace", fontweight="bold",
@@ -670,16 +660,14 @@ def plot_amplitude_statistics_comparison(raw_before, raw_after, subject_id, pers
                 fontsize=14, fontweight="bold")
     plt.tight_layout()
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = output_dir / f"sub-{subject_id}_{person}_interpolate_statistics.png"
-    fig.savefig(plot_path, dpi=150, bbox_inches="tight")
+    plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_interpolate_statistics.png", dpi=150)
     plt.close(fig)
-    print(f"  ✓ Statistics comparison saved: {plot_path.name}")
+    print(f"  âœ“ Statistics comparison saved: {plot_path.name}")
 
 
-def main():
-    args = parse_args()
-    subjects = get_subjects(args.subjects)
+def main(argv=None):
+    args = parse_args(argv)
+    subjects = resolve_subjects(args.subjects, config.SUBJECTS, mode="viz")
     duration = args.duration
     output_dir = config.QC_DIR
 
@@ -694,7 +682,7 @@ def main():
     for subject_id in subjects:
         print(f"\n--- Subject {subject_id} ---")
 
-        for person in ["P1", "P2"]:
+        for person in DEFAULT_PERSONS:
             before_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_badchannels_detected.fif"
             after_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_interpolated.fif"
 
@@ -727,9 +715,10 @@ def main():
                 print(f"  {person}: Error: {e}")
 
     print("\n" + "=" * 80)
-    print(f"✓ All visualizations saved to: {output_dir}")
+    print(f"âœ“ All visualizations saved to: {output_dir}")
     print("=" * 80 + "\n")
 
 
 if __name__ == "__main__":
     main()
+

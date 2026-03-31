@@ -1,16 +1,21 @@
-"""
-Sanity Check Visualization for Step 03: Bad Channels Detect
+﻿"""
+Sanity Check Plot Module for Step 03: Bad Channels Detect
 
 Creates visualization plots for bad channel detection:
 - Topomap highlighting detected bad channels
 - Channel amplitude comparison (good vs bad)
 - QC report visualization (noise levels per channel)
 
-Usage:
-    python sanity_checks/scripts/sc_03_bad_channels_viz.py [--subjects 01,02]
+Entry point:
+    python sanity_checks/scripts/sc_03_bad_channels_detect.py --mode viz
 
 Options:
     --subjects: Comma-separated subject IDs (default: first 2)
+
+REASONING:
+- Purpose: justify bad-channel decisions with spatial and time-domain evidence instead of only listing channel names.
+- Reproducibility: the plots are driven by the saved FIF annotations and TSV report, making the decision auditable.
+- Interpretation focus: the expected argument is "This seems correct because flagged channels stand out against neighbors rather than reflecting a global amplitude shift."
 """
 
 import argparse
@@ -31,24 +36,28 @@ if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
 from preprocessing import config
+from helpers.sc_cli import add_subjects_argument, resolve_subjects
+from helpers.sc_config import BAD_CHANNEL_VIZ, DEFAULT_PERSONS, FIXED_ABS_SCALE_UV, VIZ_NEUTRAL
+from helpers.sc_plot_io import save_figure
 
-
-# Fixed absolute-amplitude scale in uV (derived from sub-04_P2 reference plot)
-# so all generated all-channel timeseries plots are directly comparable.
-FIXED_ABS_SCALE_UV = 50.949631
 
 # Shared category colors/labels across all sanity-check figures.
-COLOR_GOOD = "black"
-COLOR_MANUAL = "#ff7f0e"
-COLOR_AUTO = "#d62728"
-COLOR_OVERLAP = "#1f77b4"
+COLOR_GOOD = BAD_CHANNEL_VIZ["good"]
+COLOR_MANUAL = BAD_CHANNEL_VIZ["manual"]
+COLOR_AUTO = BAD_CHANNEL_VIZ["auto"]
+COLOR_OVERLAP = BAD_CHANNEL_VIZ["overlap"]
 LABEL_MANUAL = "Manual (tsv file)"
 LABEL_AUTO = "Auto (our script)"
 LABEL_OVERLAP = "Overlap (tsv + script)"
 QC_COLOR_MANUAL = COLOR_MANUAL
 QC_COLOR_AUTO = COLOR_AUTO
 QC_COLOR_OVERLAP = COLOR_OVERLAP
-QC_COLOR_THRESHOLD = "#e377c2"
+QC_COLOR_THRESHOLD = BAD_CHANNEL_VIZ["threshold"]
+COLOR_NEIGHBOR = BAD_CHANNEL_VIZ["neighbor"]
+COLOR_GOOD_STRONG = BAD_CHANNEL_VIZ["good_strong"]
+COLOR_GOOD_HIST = BAD_CHANNEL_VIZ["good_hist"]
+COLOR_AFTER_HIST = BAD_CHANNEL_VIZ["after_hist"]
+COLOR_BAD_EDGE = BAD_CHANNEL_VIZ["bad_edge"]
 
 
 def _wrap_prefixed_line(prefix, text, width=56):
@@ -67,31 +76,12 @@ def _wrap_prefixed_line(prefix, text, width=56):
     return lines
 
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="Visualize bad channel detection (channels marked for exclusion/interpolation)",
     )
-    parser.add_argument(
-        "--subjects",
-        type=str,
-        default=None,
-        help="Comma-separated subject IDs. Default: first 2.",
-    )
-    return parser.parse_args()
-
-
-def _normalize_subject_id(subject_id):
-    """Return subject IDs in the zero-padded format used by the pipeline files."""
-    value = str(subject_id).strip()
-    if not value:
-        return value
-    return value.zfill(2) if value.isdigit() else value
-
-
-def get_subjects(subject_str):
-    if subject_str:
-        return [_normalize_subject_id(part) for part in subject_str.split(",") if part.strip()]
-    return [_normalize_subject_id(subject_id) for subject_id in list(config.SUBJECTS)[:2]]
+    add_subjects_argument(parser)
+    return parser.parse_args(argv)
 
 
 def _get_report_channel_sets(subject_id, person, channels):
@@ -268,7 +258,7 @@ def plot_all_channels_timeseries(raw, subject_id, person, output_dir, duration_s
     # Lower panel: bad-channel zoom with absolute amplitudes in uV (shared |uV| scale).
     if bad_indices:
         focus_indices = bad_indices
-        neighbor_color = "#4d4d4d"
+        neighbor_color = COLOR_NEIGHBOR
         row_specs = []
         for ch_idx in focus_indices:
             neighbors = _nearest_clean_neighbors(ch_idx, k=2)
@@ -361,15 +351,24 @@ def plot_all_channels_timeseries(raw, subject_id, person, output_dir, duration_s
     plt.figure(fig_bad.number)
     plt.tight_layout(rect=[0, 0, 0.91, 0.96])
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path_overview = output_dir / f"sub-{subject_id}_{person}_bad_channels_all_channels_timeseries_overview.png"
-    plot_path_neighbors = output_dir / f"sub-{subject_id}_{person}_bad_channels_all_channels_timeseries_neighbors.png"
-    fig_all.savefig(plot_path_overview, dpi=140)
-    fig_bad.savefig(plot_path_neighbors, dpi=140, bbox_inches="tight", pad_inches=0.06)
+    plot_path_overview = save_figure(
+        fig_all,
+        output_dir,
+        f"sub-{subject_id}_{person}_bad_channels_all_channels_timeseries_overview.png",
+        dpi=140,
+        bbox_inches=None,
+    )
+    plot_path_neighbors = save_figure(
+        fig_bad,
+        output_dir,
+        f"sub-{subject_id}_{person}_bad_channels_all_channels_timeseries_neighbors.png",
+        dpi=140,
+        pad_inches=0.06,
+    )
     plt.close(fig_all)
     plt.close(fig_bad)
-    print(f"  ✓ All-channel overview saved: {plot_path_overview.name}")
-    print(f"  ✓ Neighbor zoom saved: {plot_path_neighbors.name}")
+    print(f"  âœ“ All-channel overview saved: {plot_path_overview.name}")
+    print(f"  âœ“ Neighbor zoom saved: {plot_path_neighbors.name}")
 
 
 def plot_bad_channels_topomap(raw, subject_id, person, output_dir):
@@ -531,15 +530,21 @@ def plot_bad_channels_topomap(raw, subject_id, person, output_dir):
                 va="bottom",
                 fontsize=7.2,
                 fontweight="bold",
-                color="black",
+                color=VIZ_NEUTRAL["black"],
                 zorder=7,
-                bbox=dict(boxstyle="round,pad=0.18", facecolor="white", edgecolor="#444444", linewidth=0.9, alpha=0.95),
+                bbox=dict(
+                    boxstyle="round,pad=0.18",
+                    facecolor=VIZ_NEUTRAL["white"],
+                    edgecolor=VIZ_NEUTRAL["text_mid"],
+                    linewidth=0.9,
+                    alpha=0.95,
+                ),
             )
 
     cbar = fig.colorbar(im, ax=ax_topo, shrink=0.85, pad=0.03)
     cbar.set_label("Robust z-score of channel STD")
     ax_topo.set_title(
-        f"Detection evidence topomap\nColor = robust z-score (clipped ±{robust_vlim:.1f}), threshold = ±{threshold:.1f}",
+        f"Detection evidence topomap\nColor = robust z-score (clipped Â±{robust_vlim:.1f}), threshold = Â±{threshold:.1f}",
         fontsize=11,
         fontweight="bold",
     )
@@ -570,7 +575,7 @@ def plot_bad_channels_topomap(raw, subject_id, person, output_dir):
             else:
                 source_label = "auto_reason"
             lines.append(f"{rank}. {channel_name} [{source_label}]")
-            lines.append(f"   z={z_scores[idx]:+.2f} | std={std_uv[idx]:.2f} µV")
+            lines.append(f"   z={z_scores[idx]:+.2f} | std={std_uv[idx]:.2f} ÂµV")
             lines.extend(_wrap_prefixed_line("   reasons: ", reason_text, width=54))
             lines.append("")
         lines.extend([
@@ -579,8 +584,8 @@ def plot_bad_channels_topomap(raw, subject_id, person, output_dir):
             f"- flat: std <= {config.BAD_CHANNEL_FLAT_STD_THRESHOLD:.1e}",
             "- manual_tsv: listed manually in TSV",
         ])
-        box_color = "#ffe6e6"
-        edge_color = "#d62728"
+        box_color = BAD_CHANNEL_VIZ["bad_box_face"]
+        edge_color = BAD_CHANNEL_VIZ["bad_box_edge"]
         lines.extend([
             "",
             f"Manual-only: {len(suggested_only_set)} | Auto-only: {len(detected_only_set)} | Overlap: {len(both_set)}",
@@ -589,8 +594,8 @@ def plot_bad_channels_topomap(raw, subject_id, person, output_dir):
         info_text = "\n".join(lines)
     else:
         info_text = "No bad channels detected or suggested.\nAll channels are within thresholds."
-        box_color = "#e6ffe6"
-        edge_color = "#2ca02c"
+        box_color = BAD_CHANNEL_VIZ["good_box_face"]
+        edge_color = BAD_CHANNEL_VIZ["good_box_edge"]
 
     fig.suptitle(
         (
@@ -602,11 +607,9 @@ def plot_bad_channels_topomap(raw, subject_id, person, output_dir):
     )
     plt.tight_layout(rect=[0, 0, 1, 0.95])
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = output_dir / f"sub-{subject_id}_{person}_bad_channels_topomap.png"
-    fig.savefig(plot_path, dpi=150, bbox_inches="tight")
+    plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_bad_channels_topomap.png", dpi=150)
     plt.close(fig)
-    print(f"  ✓ Bad channels topomap saved: {plot_path.name}")
+    print(f"  âœ“ Bad channels topomap saved: {plot_path.name}")
 
     # Save reasons as its own standalone text figure for reporting.
     n_lines = max(3, len(info_text.splitlines()))
@@ -614,7 +617,7 @@ def plot_bad_channels_topomap(raw, subject_id, person, output_dir):
     fig_w = min(12.5, max(8.8, 0.115 * max_line_len + 1.6))
     fig_h = max(5.4, 0.34 * n_lines + 1.8)
     fig_text, ax_text = plt.subplots(figsize=(fig_w, fig_h))
-    fig_text.patch.set_facecolor("white")
+    fig_text.patch.set_facecolor(VIZ_NEUTRAL["white"])
     ax_text.axis("off")
     title_text = f"sub-{subject_id} {person} - Bad Channel Reasons"
     ax_text.text(0.02, 0.98, title_text, ha="left", va="top", fontsize=14, fontweight="bold", transform=ax_text.transAxes)
@@ -647,10 +650,15 @@ def plot_bad_channels_topomap(raw, subject_id, person, output_dir):
         bbox=dict(boxstyle="round,pad=0.75", facecolor=box_color, edgecolor=edge_color, linewidth=2, alpha=0.9),
     )
     fig_text.subplots_adjust(left=0.02, right=0.985, top=0.985, bottom=0.02)
-    text_plot_path = output_dir / f"sub-{subject_id}_{person}_bad_channels_topomap_reasons.png"
-    fig_text.savefig(text_plot_path, dpi=180)
+    text_plot_path = save_figure(
+        fig_text,
+        output_dir,
+        f"sub-{subject_id}_{person}_bad_channels_topomap_reasons.png",
+        dpi=180,
+        bbox_inches=None,
+    )
     plt.close(fig_text)
-    print(f"  ✓ Bad channel reasons saved: {text_plot_path.name}")
+    print(f"  âœ“ Bad channel reasons saved: {text_plot_path.name}")
 
 
 def plot_bad_channels_amplitudes(raw_before, raw_after, subject_id, person, output_dir):
@@ -689,23 +697,23 @@ def plot_bad_channels_amplitudes(raw_before, raw_after, subject_id, person, outp
     ax1 = plt.subplot(2, 2, 1)
     if len(std_before) > 0 and len(std_after) > 0:
         ax1.hist(std_before, bins=15, alpha=0.6, label="Before Detection", 
-                color="#1f77b4", edgecolor="black", linewidth=1.2)
+                color=COLOR_GOOD_HIST, edgecolor=VIZ_NEUTRAL["black"], linewidth=1.2)
         ax1.hist(std_after, bins=15, alpha=0.6, label="After Detection", 
-                color="#ff7f0e", edgecolor="black", linewidth=1.2)
-        ax1.axvline(np.mean(std_before), color="#1f77b4", linestyle="--", linewidth=2, label=f"Mean (before): {np.mean(std_before):.1f} µV")
+                color=COLOR_AFTER_HIST, edgecolor=VIZ_NEUTRAL["black"], linewidth=1.2)
+        ax1.axvline(np.mean(std_before), color=COLOR_GOOD_HIST, linestyle="--", linewidth=2, label=f"Mean (before): {np.mean(std_before):.1f} ÂµV")
         
         if len(bads) > 0:
             # Mark outlier threshold
             outlier_threshold = np.mean(std_before) + 3 * np.std(std_before)
-            ax1.axvline(outlier_threshold, color="#d62728", linestyle="--", linewidth=2.5, label=f"Outlier threshold: {outlier_threshold:.1f} µV")
+            ax1.axvline(outlier_threshold, color=COLOR_AUTO, linestyle="--", linewidth=2.5, label=f"Outlier threshold: {outlier_threshold:.1f} ÂµV")
         
-        ax1.set_xlabel("Standard Deviation (µV)", fontsize=11, fontweight="bold")
+        ax1.set_xlabel("Standard Deviation (ÂµV)", fontsize=11, fontweight="bold")
         ax1.set_ylabel("Channel Count", fontsize=11, fontweight="bold")
         ax1.set_title("Amplitude Distribution\n(Bad channels = outliers)", fontsize=11, fontweight="bold")
         ax1.legend(fontsize=9)
         ax1.grid(alpha=0.3, axis="y")
 
-    # Per-channel scatter (top right) — CLEARLY MARK BAD CHANNELS
+    # Per-channel scatter (top right) â€” CLEARLY MARK BAD CHANNELS
     ax2 = plt.subplot(2, 2, 2)
     if len(std_after) > 0:
         channel_indices = np.arange(len(std_after))
@@ -713,20 +721,20 @@ def plot_bad_channels_amplitudes(raw_before, raw_after, subject_id, person, outp
         
         # Plot good channels (large, green circles)
         ax2.scatter(channel_indices[good_mask], std_after[good_mask], 
-                  s=150, c="#2ca02c", alpha=0.7, edgecolors="black", linewidth=2, label="✓ GOOD", zorder=3)
+                  s=150, c=COLOR_GOOD_STRONG, alpha=0.7, edgecolors=VIZ_NEUTRAL["black"], linewidth=2, label="âœ“ GOOD", zorder=3)
         
         # Plot bad channels (large red X with halo)
         if np.any(bad_mask_after):
             ax2.scatter(channel_indices[bad_mask_after], std_after[bad_mask_after], 
-                       s=300, c="#d62728", marker="X", linewidth=3, label="✗ BAD", zorder=4, edgecolors="darkred")
+                       s=300, c=COLOR_AUTO, marker="X", linewidth=3, label="âœ— BAD", zorder=4, edgecolors=COLOR_BAD_EDGE)
             # Add red circle halos around bad channels
             for idx in np.where(bad_mask_after)[0]:
-                circle = plt.Circle((idx, std_after[idx]), 3, fill=False, edgecolor="#d62728", linewidth=3, linestyle="--", alpha=0.5)
+                circle = plt.Circle((idx, std_after[idx]), 3, fill=False, edgecolor=COLOR_AUTO, linewidth=3, linestyle="--", alpha=0.5)
                 ax2.add_patch(circle)
         
         ax2.set_xlabel("Channel Index", fontsize=11, fontweight="bold")
-        ax2.set_ylabel("Std (µV)", fontsize=11, fontweight="bold")
-        ax2.set_title(f"Per-Channel Amplitude: {len(bads)} BAD channels identified", fontsize=11, fontweight="bold", color="#d62728")
+        ax2.set_ylabel("Std (ÂµV)", fontsize=11, fontweight="bold")
+        ax2.set_title(f"Per-Channel Amplitude: {len(bads)} BAD channels identified", fontsize=11, fontweight="bold", color=COLOR_AUTO)
         ax2.legend(fontsize=10, loc="upper left")
         ax2.grid(alpha=0.3)
 
@@ -735,9 +743,9 @@ def plot_bad_channels_amplitudes(raw_before, raw_after, subject_id, person, outp
     n_bad = len(bads)
     n_good = len(eeg_picks_after) - n_bad
     
-    labels = [f"✓ GOOD\n({n_good})", f"✗ BAD\n({n_bad})"]
+    labels = [f"âœ“ GOOD\n({n_good})", f"âœ— BAD\n({n_bad})"]
     sizes = [n_good, n_bad]
-    colors_pie = ["#2ca02c", "#d62728"]
+    colors_pie = [COLOR_GOOD_STRONG, COLOR_AUTO]
     explode = (0, 0.15) if n_bad > 0 else (0, 0)
     
     wedges, texts, autotexts = ax3.pie(sizes, explode=explode, labels=labels, colors=colors_pie, 
@@ -746,24 +754,24 @@ def plot_bad_channels_amplitudes(raw_before, raw_after, subject_id, person, outp
     
     # Enhance the pie chart
     for autotext in autotexts:
-        autotext.set_color("white")
+        autotext.set_color(VIZ_NEUTRAL["white"])
         autotext.set_fontsize(12)
         autotext.set_fontweight("bold")
     
     ax3.set_title(f"Channel Status Summary\nTotal: {len(eeg_picks_after)} channels", fontsize=11, fontweight="bold")
 
-    # Bad channels list (bottom right) — PROMINENTLY DISPLAYED
+    # Bad channels list (bottom right) â€” PROMINENTLY DISPLAYED
     ax4 = plt.subplot(2, 2, 4)
     if len(bads) > 0:
-        bad_list_text = "❌ IDENTIFIED BAD CHANNELS:\n\n"
+        bad_list_text = "âŒ IDENTIFIED BAD CHANNELS:\n\n"
         for i, ch in enumerate(sorted(bads), 1):
             bad_list_text += f"  {i}. {ch}\n"
-        bg_color = "#ffe6e6"
-        title_color = "#d62728"
+        bg_color = BAD_CHANNEL_VIZ["bad_box_face"]
+        title_color = BAD_CHANNEL_VIZ["bad_box_edge"]
     else:
-        bad_list_text = "✓ NO BAD CHANNELS DETECTED\nAll channels are good!"
-        bg_color = "#e6ffe6"
-        title_color = "#2ca02c"
+        bad_list_text = "âœ“ NO BAD CHANNELS DETECTED\nAll channels are good!"
+        bg_color = BAD_CHANNEL_VIZ["good_box_face"]
+        title_color = BAD_CHANNEL_VIZ["good_box_edge"]
     
     ax4.text(0.05, 0.95, bad_list_text, transform=ax4.transAxes,
             fontsize=12, verticalalignment="top", family="monospace", fontweight="bold",
@@ -773,11 +781,9 @@ def plot_bad_channels_amplitudes(raw_before, raw_after, subject_id, person, outp
     fig.suptitle(f"sub-{subject_id} {person} - BAD CHANNEL DETECTION RESULTS", fontsize=14, fontweight="bold")
     plt.tight_layout()
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = output_dir / f"sub-{subject_id}_{person}_bad_channels_amplitudes.png"
-    fig.savefig(plot_path, dpi=150, bbox_inches="tight")
+    plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_bad_channels_amplitudes.png", dpi=150)
     plt.close(fig)
-    print(f"  ✓ Bad channels amplitude comparison saved: {plot_path.name}")
+    print(f"  âœ“ Bad channels amplitude comparison saved: {plot_path.name}")
 
 
 def plot_qc_report_visualization(subject_id, person, output_dir):
@@ -819,7 +825,7 @@ def plot_qc_report_visualization(subject_id, person, output_dir):
 
         def _plot_qc_zscore_panel(ax):
             """Render the robust z-score QC panel."""
-            ax.scatter(channel_idx, qc_data["robust_z"], s=42, color="#7a7a7a", alpha=0.75, label="Channels")
+            ax.scatter(channel_idx, qc_data["robust_z"], s=42, color=VIZ_NEUTRAL["point_gray"], alpha=0.75, label="Channels")
             if qc_data["is_auto_only"].any():
                 ax.scatter(
                     channel_idx[qc_data["is_auto_only"]],
@@ -890,7 +896,7 @@ def plot_qc_report_visualization(subject_id, person, output_dir):
                     fontweight="bold",
                     ha="left",
                     va="center",
-                    bbox=dict(boxstyle="round,pad=0.16", facecolor="white", edgecolor="#555555", alpha=0.9),
+                    bbox=dict(boxstyle="round,pad=0.16", facecolor=VIZ_NEUTRAL["white"], edgecolor=VIZ_NEUTRAL["marker_edge"], alpha=0.9),
                     zorder=6,
                 )
 
@@ -902,7 +908,7 @@ def plot_qc_report_visualization(subject_id, person, output_dir):
 
         def _plot_qc_std_panel(ax):
             """Render the channel-STD QC panel."""
-            ax.scatter(channel_idx, qc_data["std_uv"], s=42, color="#7a7a7a", alpha=0.75, label="Channels")
+            ax.scatter(channel_idx, qc_data["std_uv"], s=42, color=VIZ_NEUTRAL["point_gray"], alpha=0.75, label="Channels")
             if qc_data["is_auto_only"].any():
                 ax.scatter(
                     channel_idx[qc_data["is_auto_only"]],
@@ -952,7 +958,7 @@ def plot_qc_report_visualization(subject_id, person, output_dir):
                 color=QC_COLOR_THRESHOLD,
                 linestyle="--",
                 linewidth=2,
-                label=f"flat threshold ({flat_threshold_uv:.2e} µV)",
+                label=f"flat threshold ({flat_threshold_uv:.2e} ÂµV)",
             )
 
             for row in marked_rows.itertuples(index=False):
@@ -966,12 +972,12 @@ def plot_qc_report_visualization(subject_id, person, output_dir):
                     fontweight="bold",
                     ha="left",
                     va="center",
-                    bbox=dict(boxstyle="round,pad=0.16", facecolor="white", edgecolor="#555555", alpha=0.9),
+                    bbox=dict(boxstyle="round,pad=0.16", facecolor=VIZ_NEUTRAL["white"], edgecolor=VIZ_NEUTRAL["marker_edge"], alpha=0.9),
                     zorder=6,
                 )
 
             ax.set_xlabel("Channel index")
-            ax.set_ylabel("STD (µV)")
+            ax.set_ylabel("STD (ÂµV)")
             ax.set_title("Channel STD used by detector")
             ax.grid(alpha=0.3)
             ax.legend(fontsize=8.5, markerscale=0.8, handletextpad=0.35, borderpad=0.25)
@@ -995,37 +1001,33 @@ def plot_qc_report_visualization(subject_id, person, output_dir):
         fig.suptitle(f"sub-{subject_id} {person} - QC Metrics from Bad Channel Detection")
         plt.tight_layout(rect=[0, 0.04, 1, 0.96])
 
-        output_dir.mkdir(parents=True, exist_ok=True)
-        plot_path = output_dir / f"sub-{subject_id}_{person}_bad_channels_qc_metrics.png"
-        fig.savefig(plot_path, dpi=100, bbox_inches="tight")
+        plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_bad_channels_qc_metrics.png", dpi=100)
         plt.close(fig)
-        print(f"  ✓ QC metrics visualization saved: {plot_path.name}")
+        print(f"  âœ“ QC metrics visualization saved: {plot_path.name}")
 
         fig_z, ax_z = plt.subplots(1, 1, figsize=(9.2, 6.8))
         _plot_qc_zscore_panel(ax_z)
         fig_z.suptitle(f"sub-{subject_id} {person} - QC Detection Scores", fontsize=13, fontweight="bold")
         fig_z.tight_layout(rect=[0, 0, 1, 0.96])
-        zscore_path = output_dir / f"sub-{subject_id}_{person}_bad_channels_qc_zscore.png"
-        fig_z.savefig(zscore_path, dpi=130, bbox_inches="tight")
+        zscore_path = save_figure(fig_z, output_dir, f"sub-{subject_id}_{person}_bad_channels_qc_zscore.png", dpi=130)
         plt.close(fig_z)
-        print(f"  ✓ QC z-score panel saved: {zscore_path.name}")
+        print(f"  âœ“ QC z-score panel saved: {zscore_path.name}")
 
         fig_std, ax_std = plt.subplots(1, 1, figsize=(9.2, 6.8))
         _plot_qc_std_panel(ax_std)
         fig_std.suptitle(f"sub-{subject_id} {person} - QC Channel STD", fontsize=13, fontweight="bold")
         fig_std.tight_layout(rect=[0, 0, 1, 0.96])
-        std_path = output_dir / f"sub-{subject_id}_{person}_bad_channels_qc_std.png"
-        fig_std.savefig(std_path, dpi=130, bbox_inches="tight")
+        std_path = save_figure(fig_std, output_dir, f"sub-{subject_id}_{person}_bad_channels_qc_std.png", dpi=130)
         plt.close(fig_std)
-        print(f"  ✓ QC STD panel saved: {std_path.name}")
+        print(f"  âœ“ QC STD panel saved: {std_path.name}")
 
     except Exception as e:
         print(f"  WARNING: Could not visualize QC report: {e}")
 
 
-def main():
-    args = parse_args()
-    subjects = get_subjects(args.subjects)
+def main(argv=None):
+    args = parse_args(argv)
+    subjects = resolve_subjects(args.subjects, config.SUBJECTS, mode="viz")
     output_dir = config.QC_DIR
 
     print("\n" + "=" * 80)
@@ -1038,7 +1040,7 @@ def main():
     for subject_id in subjects:
         print(f"\n--- Subject {subject_id} ---")
 
-        for person in ["P1", "P2"]:
+        for person in DEFAULT_PERSONS:
             before_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_renamed_montaged.fif"
             after_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_badchannels_detected.fif"
 
@@ -1064,9 +1066,10 @@ def main():
                 print(f"  {person}: Error: {e}")
 
     print("\n" + "=" * 80)
-    print(f"✓ All visualizations saved to: {output_dir}")
+    print(f"âœ“ All visualizations saved to: {output_dir}")
     print("=" * 80 + "\n")
 
 
 if __name__ == "__main__":
     main()
+

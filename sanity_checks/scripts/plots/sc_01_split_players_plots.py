@@ -1,16 +1,21 @@
-"""
-Sanity Check Visualization for Step 01: Split Players
+﻿"""
+Sanity Check Plot Module for Step 01: Split Players
 
 Creates comparison plots for the player-splitting step:
 - Data distribution per player (duration, channels)
 - Event/task consistency between P1 and P2
 - Data statistics per player comparison
 
-Usage:
-    python sanity_checks/scripts/sc_01_split_players_viz.py [--subjects 01,02]
+Entry point:
+    python sanity_checks/scripts/sc_01_split_players.py --mode viz
 
 Options:
     --subjects: Comma-separated subject IDs (default: first 2)
+
+REASONING:
+- Purpose: show that both player streams retain comparable timing and expected channel content after the split.
+- Reproducibility: the figures are deterministic summaries of the saved split FIF files.
+- Interpretation focus: the expected argument is "This seems correct because both players keep similar duration and sample counts while channel leakage stays at zero."
 """
 
 import argparse
@@ -27,25 +32,21 @@ if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
 from preprocessing import config
+from helpers.sc_cli import add_subjects_argument, resolve_subjects
+from helpers.sc_config import DEFAULT_PERSONS, SPLIT_VIZ
+from helpers.sc_plot_io import save_figure
 
 
-def parse_args():
+PLAYER_COLORS = [SPLIT_VIZ["p1"], SPLIT_VIZ["p2"]]
+EXPECTED_COLOR = SPLIT_VIZ["expected"]
+
+
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="Visualize split-players effects (per-subject P1 vs P2 data distribution)",
     )
-    parser.add_argument(
-        "--subjects",
-        type=str,
-        default=None,
-        help="Comma-separated subject IDs. Default: first 2.",
-    )
-    return parser.parse_args()
-
-
-def get_subjects(subject_str):
-    if subject_str:
-        return subject_str.split(",")
-    return list(config.SUBJECTS)[:2]
+    add_subjects_argument(parser)
+    return parser.parse_args(argv)
 
 
 def plot_data_summary_per_player(subject_id, output_dir):
@@ -58,7 +59,7 @@ def plot_data_summary_per_player(subject_id, output_dir):
         "Est. Size (MB)": [],
     }
 
-    for person in ["P1", "P2"]:
+    for person in DEFAULT_PERSONS:
         file_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_split.fif"
 
         if not file_path.exists():
@@ -84,7 +85,7 @@ def plot_data_summary_per_player(subject_id, output_dir):
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
     # Duration comparison
-    axes[0, 0].bar(summary_data["Player"], summary_data["Duration (s)"], color=["#1f77b4", "#ff7f0e"], alpha=0.7, edgecolor="black")
+    axes[0, 0].bar(summary_data["Player"], summary_data["Duration (s)"], color=PLAYER_COLORS, alpha=0.7, edgecolor="black")
     axes[0, 0].set_ylabel("Duration (s)")
     axes[0, 0].set_title("Recording Duration per Player")
     axes[0, 0].grid(axis="y", alpha=0.3)
@@ -92,7 +93,7 @@ def plot_data_summary_per_player(subject_id, output_dir):
         axes[0, 0].text(i, v + 1, f"{v:.1f}s", ha="center", fontweight="bold")
 
     # Channels
-    axes[0, 1].bar(summary_data["Player"], summary_data["Channels"], color=["#1f77b4", "#ff7f0e"], alpha=0.7, edgecolor="black")
+    axes[0, 1].bar(summary_data["Player"], summary_data["Channels"], color=PLAYER_COLORS, alpha=0.7, edgecolor="black")
     axes[0, 1].set_ylabel("Number of Channels")
     axes[0, 1].set_title("Channel Count per Player")
     axes[0, 1].grid(axis="y", alpha=0.3)
@@ -100,7 +101,7 @@ def plot_data_summary_per_player(subject_id, output_dir):
         axes[0, 1].text(i, v + 0.5, str(v), ha="center", fontweight="bold")
 
     # Samples
-    axes[1, 0].bar(summary_data["Player"], summary_data["Samples"], color=["#1f77b4", "#ff7f0e"], alpha=0.7, edgecolor="black")
+    axes[1, 0].bar(summary_data["Player"], summary_data["Samples"], color=PLAYER_COLORS, alpha=0.7, edgecolor="black")
     axes[1, 0].set_ylabel("Number of Samples")
     axes[1, 0].set_title("Sample Count per Player")
     axes[1, 0].grid(axis="y", alpha=0.3)
@@ -108,7 +109,7 @@ def plot_data_summary_per_player(subject_id, output_dir):
         axes[1, 0].text(i, v + 500, f"{v:,}", ha="center", fontweight="bold", fontsize=9)
 
     # File size
-    axes[1, 1].bar(summary_data["Player"], summary_data["Est. Size (MB)"], color=["#1f77b4", "#ff7f0e"], alpha=0.7, edgecolor="black")
+    axes[1, 1].bar(summary_data["Player"], summary_data["Est. Size (MB)"], color=PLAYER_COLORS, alpha=0.7, edgecolor="black")
     axes[1, 1].set_ylabel("Estimated Size (MB)")
     axes[1, 1].set_title("Estimated Data Size per Player")
     axes[1, 1].grid(axis="y", alpha=0.3)
@@ -118,11 +119,9 @@ def plot_data_summary_per_player(subject_id, output_dir):
     fig.suptitle(f"sub-{subject_id} - Player Data Distribution (after Split)")
     plt.tight_layout()
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = output_dir / f"sub-{subject_id}_split_players_data_summary.png"
-    fig.savefig(plot_path, dpi=100, bbox_inches="tight")
+    plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_split_players_data_summary.png", dpi=100)
     plt.close(fig)
-    print(f"  ✓ Data summary plot saved: {plot_path.name}")
+    print(f"  âœ“ Data summary plot saved: {plot_path.name}")
 
 
 def plot_split_integrity_checks(subject_id, output_dir):
@@ -145,7 +144,7 @@ def plot_split_integrity_checks(subject_id, output_dir):
     ax_checks = plt.subplot(2, 2, 4)
 
     players = ["P1", "P2"]
-    colors = ["#1f77b4", "#ff7f0e"]
+    colors = PLAYER_COLORS
     expected_totals = []
     actual_totals = []
     wrong_prefix_counts = []
@@ -207,7 +206,7 @@ def plot_split_integrity_checks(subject_id, output_dir):
     x = np.arange(len(players))
     width = 0.35
 
-    ax_counts.bar(x - width / 2, expected_totals, width, label="Expected", color="#9ecae1", edgecolor="black")
+    ax_counts.bar(x - width / 2, expected_totals, width, label="Expected", color=EXPECTED_COLOR, edgecolor="black")
     ax_counts.bar(x + width / 2, actual_totals, width, label="Actual split", color=colors, edgecolor="black")
     ax_counts.set_xticks(x)
     ax_counts.set_xticklabels(players)
@@ -268,16 +267,14 @@ def plot_split_integrity_checks(subject_id, output_dir):
     fig.suptitle(f"sub-{subject_id} - Split Players Validation\n(Checks whether each split file contains the correct player channels and unchanged timing)")
     plt.tight_layout()
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = output_dir / f"sub-{subject_id}_split_players_validation.png"
-    fig.savefig(plot_path, dpi=120, bbox_inches="tight")
+    plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_split_players_validation.png", dpi=120)
     plt.close(fig)
-    print(f"  ✓ Split validation plot saved: {plot_path.name}")
+    print(f"  âœ“ Split validation plot saved: {plot_path.name}")
 
 
-def main():
-    args = parse_args()
-    subjects = get_subjects(args.subjects)
+def main(argv=None):
+    args = parse_args(argv)
+    subjects = resolve_subjects(args.subjects, config.SUBJECTS, mode="viz")
     output_dir = config.QC_DIR
 
     print("\n" + "=" * 80)
@@ -305,9 +302,10 @@ def main():
         plot_split_integrity_checks(subject_id, output_dir)
 
     print("\n" + "=" * 80)
-    print(f"✓ All visualizations saved to: {output_dir}")
+    print(f"âœ“ All visualizations saved to: {output_dir}")
     print("=" * 80 + "\n")
 
 
 if __name__ == "__main__":
     main()
+

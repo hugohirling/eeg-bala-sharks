@@ -15,23 +15,17 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-SANITY_CHECKS = {
-    "00": "sc_00_downsample.py",
-    "01": "sc_01_split_players.py",
-    "02": "sc_02_rename_montage.py",
-    "03": "sc_03_bad_channels_detect.py",
-    "04": "sc_04_interpolate.py",
-    "05": "sc_05_filter.py",
-    "06": "sc_06_ica.py",
-    "07": "sc_07_epoch.py",
-}
+CURRENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = CURRENT_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-SCRIPTS_DIR = Path(__file__).resolve().parent / "scripts"
+from sanity_checks.scripts.sc_config import SCRIPTS_DIR, STEP_CHECK_FILES
 
 
 def run_sanity_check(step_id: str, subjects: str = None) -> bool:
     """Run a single sanity check script. Returns True if successful."""
-    script_path = SCRIPTS_DIR / SANITY_CHECKS[step_id]
+    script_path = SCRIPTS_DIR / STEP_CHECK_FILES[step_id]
 
     if not script_path.exists():
         print(f"  ERROR: Script not found: {script_path}")
@@ -44,7 +38,7 @@ def run_sanity_check(step_id: str, subjects: str = None) -> bool:
 
     try:
         print(f"\n{'='*80}")
-        print(f"Running: Step {step_id} - {SANITY_CHECKS[step_id]}")
+        print(f"Running: Step {step_id} - {STEP_CHECK_FILES[step_id]}")
         print(f"{'='*80}")
 
         result = subprocess.run(
@@ -90,12 +84,12 @@ def main():
     if args.steps:
         steps_to_run = args.steps.split(",")
     else:
-        steps_to_run = sorted(SANITY_CHECKS.keys())
+        steps_to_run = sorted(STEP_CHECK_FILES.keys())
 
     # Validate step IDs
     for step_id in steps_to_run:
-        if step_id not in SANITY_CHECKS:
-            print(f"ERROR: Unknown step ID '{step_id}'. Valid: {', '.join(sorted(SANITY_CHECKS.keys()))}")
+        if step_id not in STEP_CHECK_FILES:
+            print(f"ERROR: Unknown step ID '{step_id}'. Valid: {', '.join(sorted(STEP_CHECK_FILES.keys()))}")
             sys.exit(1)
 
     print("\n" + "=" * 80)

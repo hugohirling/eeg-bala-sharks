@@ -1,17 +1,22 @@
-"""
-Sanity Check Visualization for Step 02: Rename & Set Montage
+﻿"""
+Sanity Check Plot Module for Step 02: Rename & Set Montage
 
 Creates comparison plots for channel renaming and montage setup:
-- Channel name mapping (before: BioSemi → after: 10-20 system)
+- Channel name mapping (before: BioSemi â†’ after: 10-20 system)
 - 2D topomap visualization of electrode positions
 - 3D visualization of electrode coordinates (from montage)
 - Montage quality and consistency checks
 
-Usage:
-    python sanity_checks/scripts/sc_02_rename_montage_viz.py [--subjects 01,02]
+Entry point:
+    python sanity_checks/scripts/sc_02_rename_montage.py --mode viz
 
 Options:
     --subjects: Comma-separated subject IDs (default: first 2)
+
+REASONING:
+- Purpose: document the transition from acquisition-specific labels to interpretable scalp positions.
+- Reproducibility: the mapping and montage are fixed, so repeated runs should yield the same label list and sensor geometry.
+- Interpretation focus: the expected argument is "This seems correct because standard channel names and plausible scalp positions appear together after the step."
 """
 
 import argparse
@@ -29,25 +34,24 @@ if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
 from preprocessing import config
+from helpers.sc_cli import add_subjects_argument, resolve_subjects
+from helpers.sc_config import DEFAULT_PERSONS, MONTAGE_VIZ
+from helpers.sc_plot_io import save_figure
 
 
-def parse_args():
+COLOR_SENSOR = MONTAGE_VIZ["sensor"]
+COLOR_BEFORE = MONTAGE_VIZ["before"]
+COLOR_AFTER = MONTAGE_VIZ["after"]
+COLOR_PASS = MONTAGE_VIZ["pass"]
+COLOR_FAIL = MONTAGE_VIZ["fail"]
+
+
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="Visualize rename+montage effects (channel mapping and electrode layout)",
     )
-    parser.add_argument(
-        "--subjects",
-        type=str,
-        default=None,
-        help="Comma-separated subject IDs. Default: first 2.",
-    )
-    return parser.parse_args()
-
-
-def get_subjects(subject_str):
-    if subject_str:
-        return subject_str.split(",")
-    return list(config.SUBJECTS)[:2]
+    add_subjects_argument(parser)
+    return parser.parse_args(argv)
 
 
 def plot_montage_topomap(raw, subject_id, person, output_dir):
@@ -60,11 +64,9 @@ def plot_montage_topomap(raw, subject_id, person, output_dir):
     fig = raw_eeg.plot_sensors(kind="topomap", show_names=True, show=False, sphere="eeglab")
     fig.suptitle(f"sub-{subject_id} {person} - EEG Sensor Layout (Montage)")
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = output_dir / f"sub-{subject_id}_{person}_montage_topomap.png"
-    fig.savefig(plot_path, dpi=150, bbox_inches="tight")
+    plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_montage_topomap.png", dpi=150)
     plt.close(fig)
-    print(f"  ✓ Montage topomap saved: {plot_path.name}")
+    print(f"  âœ“ Montage topomap saved: {plot_path.name}")
 
 
 def plot_montage_3d(raw, subject_id, person, output_dir):
@@ -88,7 +90,7 @@ def plot_montage_3d(raw, subject_id, person, output_dir):
     ax = fig.add_subplot(111, projection="3d")
 
     ax.scatter(coords[:, 0], coords[:, 1], coords[:, 2],
-               s=70, c="#1f77b4", edgecolors="black", alpha=0.9)
+               s=70, c=COLOR_SENSOR, edgecolors="black", alpha=0.9)
 
     for idx, ch in enumerate(names):
         ax.text(coords[idx, 0], coords[idx, 1], coords[idx, 2], ch, fontsize=7)
@@ -102,11 +104,15 @@ def plot_montage_3d(raw, subject_id, person, output_dir):
     ax.grid(True, alpha=0.3)
     fig.subplots_adjust(left=0.08, right=0.95, bottom=0.08, top=0.90)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = output_dir / f"sub-{subject_id}_{person}_montage_3d.png"
-    fig.savefig(plot_path, dpi=150, bbox_inches="tight", pad_inches=0.25)
+    plot_path = save_figure(
+        fig,
+        output_dir,
+        f"sub-{subject_id}_{person}_montage_3d.png",
+        dpi=150,
+        pad_inches=0.25,
+    )
     plt.close(fig)
-    print(f"  ✓ 3D montage plot saved: {plot_path.name}")
+    print(f"  âœ“ 3D montage plot saved: {plot_path.name}")
 
 
 def plot_channel_naming_summary(raw_before, raw_after, subject_id, person, output_dir):
@@ -151,11 +157,9 @@ def plot_channel_naming_summary(raw_before, raw_after, subject_id, person, outpu
     fig.suptitle(f"sub-{subject_id} {person} - Channel Name Mapping")
     plt.tight_layout()
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = output_dir / f"sub-{subject_id}_{person}_montage_channel_mapping.png"
-    fig.savefig(plot_path, dpi=100, bbox_inches="tight")
+    plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_montage_channel_mapping.png", dpi=100)
     plt.close(fig)
-    print(f"  ✓ Channel mapping summary saved: {plot_path.name}")
+    print(f"  âœ“ Channel mapping summary saved: {plot_path.name}")
 
 
 def plot_montage_coverage_stats(raw_before, raw_after, subject_id, person, output_dir):
@@ -183,7 +187,7 @@ def plot_montage_coverage_stats(raw_before, raw_after, subject_id, person, outpu
     # Channel counts
     categories = ["Before\nSplit", "After\nRename + Montage"]
     channel_counts = [len(eeg_picks_before), len(eeg_picks_after)]
-    colors = ["#ff7f0e", "#2ca02c"]
+    colors = [COLOR_BEFORE, COLOR_AFTER]
     
     ax_counts.bar(categories, channel_counts, color=colors, alpha=0.7, edgecolor="black", width=0.6)
     ax_counts.set_ylabel("Count")
@@ -195,15 +199,15 @@ def plot_montage_coverage_stats(raw_before, raw_after, subject_id, person, outpu
     # Montage information
     montage_info = ["Montage Information", ""]
     if has_montage:
-        montage_info.append(f"✓ Electrode positions available: {len(raw_after.info['dig'])}")
-        montage_info.append(f"✓ Montage applied: {montage_name}")
+        montage_info.append(f"âœ“ Electrode positions available: {len(raw_after.info['dig'])}")
+        montage_info.append(f"âœ“ Montage applied: {montage_name}")
     else:
-        montage_info.append("✗ No electrode positions")
+        montage_info.append("âœ— No electrode positions")
     
     montage_info.extend([
-        f"✓ Total channels: {len(raw_after.ch_names)}",
-        f"✓ EEG channels: {len(eeg_picks_after)}",
-        f"✓ Renamed EEG labels: {recognized_renamed}/{len(names_after)}",
+        f"âœ“ Total channels: {len(raw_after.ch_names)}",
+        f"âœ“ EEG channels: {len(eeg_picks_after)}",
+        f"âœ“ Renamed EEG labels: {recognized_renamed}/{len(names_after)}",
     ])
 
     check_labels = [
@@ -223,7 +227,7 @@ def plot_montage_coverage_stats(raw_before, raw_after, subject_id, person, outpu
     passed_count = sum(check_values)
     total_checks = len(check_values)
     pass_rate = 100 * passed_count / total_checks
-    check_colors = ["#2ca02c" if passed else "#d62728" for passed in check_values]
+    check_colors = [COLOR_PASS if passed else COLOR_FAIL for passed in check_values]
     y_pos = np.arange(len(check_labels))
     ax_pass.barh(y_pos, np.ones(len(check_labels)), color=check_colors, alpha=0.85, edgecolor="black")
     ax_pass.set_xlim(0, 1)
@@ -249,16 +253,14 @@ def plot_montage_coverage_stats(raw_before, raw_after, subject_id, person, outpu
     fig.suptitle(f"sub-{subject_id} {person} - Montage Coverage & Statistics")
     plt.tight_layout(rect=[0, 0, 1, 0.95])
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = output_dir / f"sub-{subject_id}_{person}_montage_coverage_stats.png"
-    fig.savefig(plot_path, dpi=100, bbox_inches="tight")
+    plot_path = save_figure(fig, output_dir, f"sub-{subject_id}_{person}_montage_coverage_stats.png", dpi=100)
     plt.close(fig)
-    print(f"  ✓ Montage coverage stats saved: {plot_path.name}")
+    print(f"  âœ“ Montage coverage stats saved: {plot_path.name}")
 
 
-def main():
-    args = parse_args()
-    subjects = get_subjects(args.subjects)
+def main(argv=None):
+    args = parse_args(argv)
+    subjects = resolve_subjects(args.subjects, config.SUBJECTS, mode="viz")
     output_dir = config.QC_DIR
 
     print("\n" + "=" * 80)
@@ -271,7 +273,7 @@ def main():
     for subject_id in subjects:
         print(f"\n--- Subject {subject_id} ---")
 
-        for person in ["P1", "P2"]:
+        for person in DEFAULT_PERSONS:
             before_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_split.fif"
             after_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_renamed_montaged.fif"
 
@@ -297,9 +299,10 @@ def main():
                 print(f"  {person}: Error: {e}")
 
     print("\n" + "=" * 80)
-    print(f"✓ All visualizations saved to: {output_dir}")
+    print(f"âœ“ All visualizations saved to: {output_dir}")
     print("=" * 80 + "\n")
 
 
 if __name__ == "__main__":
     main()
+
