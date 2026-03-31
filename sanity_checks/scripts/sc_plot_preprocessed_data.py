@@ -111,7 +111,7 @@ def plot_raw_timeseries(raw, subject_id, person, step, duration, output_dir):
     plot_path = output_dir / f"sub-{subject_id}_{person}_step{step}_timeseries.png"
     fig.savefig(plot_path, dpi=100, bbox_inches="tight")
     plt.close(fig)
-    print(f"  âœ“ Time series plot saved: {plot_path.name}")
+    print(f"  OK Time series plot saved: {plot_path.name}")
 
 
 def plot_psd(raw, subject_id, person, step, output_dir):
@@ -126,7 +126,7 @@ def plot_psd(raw, subject_id, person, step, output_dir):
     plot_path = output_dir / f"sub-{subject_id}_{person}_step{step}_psd.png"
     fig.savefig(plot_path, dpi=100, bbox_inches="tight")
     plt.close(fig)
-    print(f"  âœ“ PSD plot saved: {plot_path.name}")
+    print(f"  OK PSD plot saved: {plot_path.name}")
 
 
 def plot_topomap(raw, subject_id, person, step, output_dir):
@@ -146,7 +146,7 @@ def plot_topomap(raw, subject_id, person, step, output_dir):
     plot_path = output_dir / f"sub-{subject_id}_{person}_step{step}_sensors.png"
     fig.savefig(plot_path, dpi=100, bbox_inches="tight")
     plt.close(fig)
-    print(f"  âœ“ Sensor layout plot saved: {plot_path.name}")
+    print(f"  OK Sensor layout plot saved: {plot_path.name}")
 
 
 def plot_epochs(epochs, subject_id, person, output_dir):
@@ -170,7 +170,7 @@ def plot_epochs(epochs, subject_id, person, output_dir):
     plot_path = output_dir / f"sub-{subject_id}_{person}_epochs_sample.png"
     fig.savefig(plot_path, dpi=100, bbox_inches="tight")
     plt.close(fig)
-    print(f"  âœ“ Sample epochs plot saved: {plot_path.name}")
+    print(f"  OK Sample epochs plot saved: {plot_path.name}")
 
     # Plot event distribution
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -190,7 +190,7 @@ def plot_epochs(epochs, subject_id, person, output_dir):
     plot_path = output_dir / f"sub-{subject_id}_{person}_epochs_distribution.png"
     fig.savefig(plot_path, dpi=100, bbox_inches="tight")
     plt.close(fig)
-    print(f"  âœ“ Epoch distribution plot saved: {plot_path.name}")
+    print(f"  OK Epoch distribution plot saved: {plot_path.name}")
 
 
 def plot_data_quality(raw, subject_id, person, step, output_dir):
@@ -213,20 +213,20 @@ def plot_data_quality(raw, subject_id, person, step, output_dir):
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
     axes[0].hist(std_values * 1e6, bins=20, edgecolor="black", alpha=0.7)
-    axes[0].set_xlabel("Standard Deviation (ÂµV)")
+    axes[0].set_xlabel("Standard Deviation (uV)")
     axes[0].set_ylabel("Channel Count")
     axes[0].set_title("STD Distribution (sample)")
     axes[0].grid(alpha=0.3)
 
     axes[1].scatter(range(len(std_values)), std_values * 1e6, alpha=0.6)
     axes[1].set_xlabel("Channel Index")
-    axes[1].set_ylabel("Std (ÂµV)")
+    axes[1].set_ylabel("Std (uV)")
     axes[1].set_title("Per-Channel Amplitude")
     axes[1].grid(alpha=0.3)
 
     axes[2].scatter(min_values * 1e6, max_values * 1e6, alpha=0.6)
-    axes[2].set_xlabel("Min (ÂµV)")
-    axes[2].set_ylabel("Max (ÂµV)")
+    axes[2].set_xlabel("Min (uV)")
+    axes[2].set_ylabel("Max (uV)")
     axes[2].set_title("Min vs Max (sample)")
     axes[2].grid(alpha=0.3)
 
@@ -237,7 +237,7 @@ def plot_data_quality(raw, subject_id, person, step, output_dir):
     plot_path = output_dir / f"sub-{subject_id}_{person}_step{step}_quality.png"
     fig.savefig(plot_path, dpi=100, bbox_inches="tight")
     plt.close(fig)
-    print(f"  âœ“ Quality metrics plot saved: {plot_path.name}")
+    print(f"  OK Quality metrics plot saved: {plot_path.name}")
 
 
 def main():
@@ -304,7 +304,7 @@ def main():
                     print(f"  {person}: Error: {e}")
 
     print("\n" + "=" * 80)
-    print(f"âœ“ All plots saved to: {output_dir}")
+    print(f"OK All plots saved to: {output_dir}")
     print("=" * 80 + "\n")
 
 
