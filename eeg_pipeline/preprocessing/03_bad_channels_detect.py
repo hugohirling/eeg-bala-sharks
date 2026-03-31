@@ -1,5 +1,3 @@
-# This file has been commented using GitHub Copilot with the Grok Code Fast 1 model.
-
 from pathlib import Path
 import sys
 import csv

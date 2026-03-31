@@ -1,5 +1,4 @@
-﻿# This file's comments were created with the help of GitHub Copilot using GPT-5.3-Codex.
-"""
+﻿"""
 Sanity Check for Step 06: ICA Component Removal
 
 Creates verification plots for the ICA decomposition and bad component removal:

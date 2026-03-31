@@ -1,5 +1,3 @@
-# This file has been commented using GitHub Copilot with the Grok Code Fast 1 model.
-
 from __future__ import annotations
 
 import argparse

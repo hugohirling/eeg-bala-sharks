@@ -1,4 +1,3 @@
-# Comments in this file were created with the help of Copilot using GPT-5.3-Codex.
 from __future__ import annotations
 
 import argparse

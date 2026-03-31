@@ -1,5 +1,4 @@
-﻿# This file's comments were created with the help of GitHub Copilot using GPT-5.3-Codex.
-"""
+﻿"""
 Sanity Check Visualization: Pipeline Progression (Original -> Processed)
 
 Creates two QC figures per subject and player:

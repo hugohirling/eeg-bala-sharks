@@ -1,4 +1,3 @@
-# Comments in this file were added with the help of GitHub Copilot (GPT-5.3-Codex).
 from __future__ import annotations
 
 import argparse
