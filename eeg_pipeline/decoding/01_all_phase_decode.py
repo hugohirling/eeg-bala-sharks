@@ -105,6 +105,23 @@ def _load_labels(subject_id: str, person: str) -> np.ndarray:
 
     return events_df[response_col].to_numpy(dtype=int)
 
+def _load_features(subject_id: str, person: str) -> np.ndarray:
+    epoch_path = _get_epoch_path(subject_id, person)
+    if not epoch_path.exists():
+        raise FileNotFoundError(f"Missing epoch file: {epoch_path}")
+    
+    epochs = mne.read_epochs(str(epoch_path), preload=True) 
+    decision_epochs = epochs.copy().crop(tmin=0.0, tmax=2.0)
+    decision_epochs.pick("eeg")
+    response_epochs = epochs.copy().crop(tmin=2.0, tmax=4.0)
+    response_epochs.pick("eeg")
+    feedback_epochs = epochs.copy().crop(tmin=4.0, tmax=5.0)
+    feedback_epochs.pick("eeg")
+    return {
+        "decision": decision_epochs.get_data(copy=True),
+        "response": response_epochs.get_data(copy=True),
+        "feedback": feedback_epochs.get_data(copy=True),
+    }
 
 def _load_decision_features(subject_id: str, person: str) -> np.ndarray:
     epoch_path = _get_epoch_path(subject_id, person)
@@ -155,9 +172,13 @@ def _decode_subject_person(
     random_state: int,
 ) -> dict:
     
-    X_decision_full = _load_decision_features(subject_id, person)
-    X_response_full = _load_response_features(subject_id, person)
-    X_feedback_full = _load_feedback_features(subject_id, person)
+    features = _load_features(subject_id, person)
+
+    X_decision_full = features["decision"]
+    X_response_full = features["response"]
+    X_feedback_full = features["feedback"]
+
+    console.print(f"Loaded features for sub-{subject_id} {person}")
 
     y_full = _load_labels(subject_id, person)
 
@@ -200,7 +221,6 @@ def _decode_subject_person(
 
     def _calculate_bin_scores(X_full: np.ndarray, y: np.ndarray, bin_func: callable, n_bins: int) -> tuple[list[float], list[float]]:
         # Match paper idea: decode in 250 ms bins. We use the mean EEG value inside each
-        # bin per channel, then aggregate across bins in the 0-2 s decision window.
         n_times = X_full.shape[2]
         bin_edges = np.linspace(0, n_times, n_bins + 1, dtype=int)
         bin_starts_s, bin_ends_s, bin_centers_s = bin_func(n_bins)
@@ -214,7 +234,7 @@ def _decode_subject_person(
             stop = bin_edges[i + 1]
             X_bin = X_full[:, :, start:stop].mean(axis=2)
 
-            cv_scores_bin = cross_val_score(clf, X_bin, y, cv=cv, scoring="accuracy")
+            cv_scores_bin = cross_val_score(clf, X_bin, y, cv=cv, scoring="accuracy", n_jobs=-1)
             bin_scores.append(float(np.mean(cv_scores_bin)))
 
             observed_acc, _perm_scores, pvalue = permutation_test_score(
@@ -225,7 +245,7 @@ def _decode_subject_person(
                 cv=cv,
                 n_permutations=n_permutations,
                 random_state=random_state,
-                n_jobs=1,
+                n_jobs=-1,
             )
             # Keep both the mean CV score and permutation score diagnostics.
             if abs(observed_acc - bin_scores[-1]) > 0.2:
@@ -234,6 +254,7 @@ def _decode_subject_person(
 
         mean_acc = float(np.mean(bin_scores))
         min_perm_pvalue = float(np.min(bin_perm_pvalues))
+
 
         return {
             "subject": subject_id,
@@ -255,13 +276,24 @@ def _decode_subject_person(
             "bin_permutation_pvalues": [float(pvalue) for pvalue in bin_perm_pvalues],
         }
     
+    # Process all phases sequentially with sklearn's built-in n_jobs parallelization.
+    # This uses process-based parallelism and avoids Python's GIL overhead.
     decision_results = _calculate_bin_scores(
-        X_decision_full, y_decision, _get_decision_bin_windows, 8)
+        X_decision_full,
+        y_decision,
+        _get_decision_bin_windows,
+        8)
     response_results = _calculate_bin_scores(
-        X_response_full, y_response, _get_response_bin_windows, 8)
+        X_response_full,
+        y_response,
+        _get_response_bin_windows,
+        8)
     feedback_results = _calculate_bin_scores(
-        X_feedback_full, y_feedback, _get_feedback_bin_windows, 4)
-    
+        X_feedback_full,
+        y_feedback,
+        _get_feedback_bin_windows,
+        4)
+
     return {
         "decision": decision_results,
         "response": response_results,
@@ -276,8 +308,6 @@ def run_decoding(
     random_state: int,
 ) -> tuple[list[dict], dict]:
     rows: list[dict] = []
-
-    
 
     with Live(progress, console=console, refresh_per_second=1) as live:
         # Calculate total items to process (subjects × persons)
@@ -394,12 +424,12 @@ def _to_timecourse_dataframe(rows: list[dict]) -> pd.DataFrame:
     return pd.DataFrame(records)
 
 
-def _save_accuracy_plot(df: pd.DataFrame, summary: dict, out_dir: Path) -> Path:
+def _save_accuracy_plot(df: pd.DataFrame, summary: dict, out_dir: Path, phase: str) -> Path:
     labels = [f"sub-{row.subject}_{row.person}" for row in df.itertuples(index=False)]
     values = df["cv_accuracy_mean"].to_numpy(dtype=float)
     errors = df["cv_accuracy_std"].to_numpy(dtype=float)
     chance = float(summary["chance_level"])
-    mean_acc = float(summary["mean_accuracy"])
+    mean_acc = float(summary[f"mean_accuracy_{phase}"])
 
     colors = ["#1f77b4" if value > chance else "#9aa0a6" for value in values]
 
@@ -409,7 +439,7 @@ def _save_accuracy_plot(df: pd.DataFrame, summary: dict, out_dir: Path) -> Path:
     ax.axhline(chance, color="#c62828", linestyle="--", linewidth=1.5, label=f"Chance = {chance:.3f}")
     ax.axhline(mean_acc, color="#2e7d32", linestyle=":", linewidth=1.5, label=f"Mean = {mean_acc:.3f}")
 
-    ax.set_title("Decision-Phase Decoding Accuracy")
+    ax.set_title(f"{phase.capitalize()}-Phase Decoding Accuracy")
     ax.set_ylabel("Classification accuracy")
     ax.set_xlabel("Subject / player")
     ax.set_xticks(x)
@@ -419,19 +449,19 @@ def _save_accuracy_plot(df: pd.DataFrame, summary: dict, out_dir: Path) -> Path:
     ax.legend()
 
     subtitle = (
-        f"One-tailed group p = {summary['group_pvalue_one_tailed_gt_chance']:.4f}, "
-        f"above chance = {summary['n_above_chance']}/{summary['n_subject_person']}"
+        f"One-tailed group p = {summary[f'group_pvalue_one_tailed_gt_chance_{phase}']:.4f}, "
+        f"above chance = {summary[f'n_above_chance_{phase}']}/{summary[f'n_subject_person']}"
     )
     fig.text(0.5, 0.01, subtitle, ha="center", va="bottom")
     fig.tight_layout(rect=(0, 0.04, 1, 1))
 
-    plot_path = out_dir / "decision_phase_decoding_accuracy.png"
+    plot_path = out_dir / f"{phase}_phase_decoding_accuracy.png"
     fig.savefig(plot_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
     return plot_path
 
 
-def _save_timecourse_plot(timecourse_df: pd.DataFrame, summary: dict, out_dir: Path) -> Path:
+def _save_timecourse_plot(timecourse_df: pd.DataFrame, summary: dict, out_dir: Path, phase: str) -> Path:
     grouped = (
         timecourse_df.groupby(["bin_index", "bin_center_s", "bin_start_s", "bin_end_s"], as_index=False)
         .agg(mean_accuracy=("accuracy", "mean"), std_accuracy=("accuracy", "std"))
@@ -449,8 +479,8 @@ def _save_timecourse_plot(timecourse_df: pd.DataFrame, summary: dict, out_dir: P
     ax.fill_between(x, y - yerr, y + yerr, color="#1f77b4", alpha=0.18, label="±1 SD")
     ax.axhline(chance, color="#c62828", linestyle="--", linewidth=1.5, label=f"Chance = {chance:.3f}")
 
-    ax.set_title("Decision-Phase Decoding Time Course")
-    ax.set_xlabel("Time from decision onset (s)")
+    ax.set_title(f"{phase.capitalize()}-Phase Decoding Time Course")
+    ax.set_xlabel(f"Time from {phase} onset (s)")
     ax.set_ylabel("Classification accuracy")
     ax.set_xticks(x)
     ax.set_xticklabels([f"{start:.2f}-{end:.2f}" for start, end in zip(grouped["bin_start_s"], grouped["bin_end_s"])], rotation=45, ha="right")
@@ -459,7 +489,7 @@ def _save_timecourse_plot(timecourse_df: pd.DataFrame, summary: dict, out_dir: P
     ax.legend()
     fig.tight_layout()
 
-    plot_path = out_dir / "decision_phase_decoding_timecourse.png"
+    plot_path = out_dir / f"{phase}_phase_decoding_timecourse.png"
     fig.savefig(plot_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
     return plot_path
@@ -470,6 +500,7 @@ def _save_timecourse_plot_by_person(
     summary: dict,
     out_dir: Path,
     person: str,
+    phase: str,
 ) -> Path | None:
     person_df = timecourse_df[timecourse_df["person"] == person].copy()
     if person_df.empty:
@@ -492,8 +523,8 @@ def _save_timecourse_plot_by_person(
     ax.fill_between(x, y - yerr, y + yerr, color="#1f77b4", alpha=0.18, label="±1 SD")
     ax.axhline(chance, color="#c62828", linestyle="--", linewidth=1.5, label=f"Chance = {chance:.3f}")
 
-    ax.set_title(f"Decision-Phase Decoding Time Course ({person})")
-    ax.set_xlabel("Time from decision onset (s)")
+    ax.set_title(f"{phase.capitalize()}-Phase Decoding Time Course ({person})")
+    ax.set_xlabel(f"Time from {phase} onset (s)")
     ax.set_ylabel("Classification accuracy")
     ax.set_xticks(x)
     ax.set_xticklabels(
@@ -506,7 +537,7 @@ def _save_timecourse_plot_by_person(
     ax.legend()
     fig.tight_layout()
 
-    plot_path = out_dir / f"decision_phase_decoding_timecourse_{person}.png"
+    plot_path = out_dir / f"{phase}_phase_decoding_timecourse_{person}.png"
     fig.savefig(plot_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
     return plot_path
@@ -529,60 +560,82 @@ def main() -> None:
         default=200,
         help="Number of label permutations for the above-chance test (default: 200)",
     )
+    parser.add_argument(
+        "--plot-only",
+        action="store_true",
+        help="Skip decoding and only generate plots from existing CSV/JSON results (default: False)",
+    )
     parser.add_argument("--random-state", type=int, default=42, help="Random seed")
     args = parser.parse_args()
 
     subjects = _resolve_subjects(args.subjects)
 
-    rows, summary = run_decoding(
-        subjects=subjects,
-        n_splits=args.n_splits,
-        n_permutations=args.n_permutations,
-        random_state=args.random_state,
-    )
-
     out_dir = Path(config.OUTPUT_DIR).parent / "decoding"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    df_decision = _to_dataframe(rows["decision"])
-    df_response = _to_dataframe(rows["response"])
-    df_feedback = _to_dataframe(rows["feedback"])
+
     csv_path_decision = out_dir / "decision_phase_decoding_results.csv"
     csv_path_response = out_dir / "response_phase_decoding_results.csv"
     csv_path_feedback = out_dir / "feedback_phase_decoding_results.csv"
-    df_decision.to_csv(csv_path_decision, index=False)
-    df_response.to_csv(csv_path_response, index=False)
-    df_feedback.to_csv(csv_path_feedback, index=False)
-
-    timecourse_df_decision = _to_timecourse_dataframe(rows["decision"])
-    timecourse_df_response = _to_timecourse_dataframe(rows["response"])
-    timecourse_df_feedback = _to_timecourse_dataframe(rows["feedback"])
     timecourse_csv_path_decision = out_dir / "decision_phase_decoding_timecourse.csv"
     timecourse_csv_path_response = out_dir / "response_phase_decoding_timecourse.csv"
     timecourse_csv_path_feedback = out_dir / "feedback_phase_decoding_timecourse.csv"
-    timecourse_df_decision.to_csv(timecourse_csv_path_decision, index=False)
-    timecourse_df_response.to_csv(timecourse_csv_path_response, index=False)
-    timecourse_df_feedback.to_csv(timecourse_csv_path_feedback, index=False)
+    json_path_summary = out_dir / "decoding_summary.json"
 
-    json_path_decision = out_dir / "decision_phase_decoding_summary.json"
-    json_path_response = out_dir / "response_phase_decoding_summary.json"
-    json_path_feedback = out_dir / "feedback_phase_decoding_summary.json"
-    json_path_decision.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    json_path_response.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    json_path_feedback.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    if not args.plot_only:
 
-    plot_path_decision = _save_accuracy_plot(df_decision, summary, out_dir)
-    plot_path_response = _save_accuracy_plot(df_response, summary, out_dir)
-    plot_path_feedback = _save_accuracy_plot(df_feedback, summary, out_dir)
-    timecourse_plot_path_decision = _save_timecourse_plot(timecourse_df_decision, summary, out_dir)
-    timecourse_plot_path_response = _save_timecourse_plot(timecourse_df_response, summary, out_dir)
-    timecourse_plot_path_feedback = _save_timecourse_plot(timecourse_df_feedback, summary, out_dir)
-    timecourse_plot_p1_path_decision = _save_timecourse_plot_by_person(timecourse_df_decision, summary, out_dir, "P1")
-    timecourse_plot_p1_path_response = _save_timecourse_plot_by_person(timecourse_df_response, summary, out_dir, "P1")
-    timecourse_plot_p1_path_feedback = _save_timecourse_plot_by_person(timecourse_df_feedback, summary, out_dir, "P1")
-    timecourse_plot_p2_path_decision = _save_timecourse_plot_by_person(timecourse_df_decision, summary, out_dir, "P2")
-    timecourse_plot_p2_path_response = _save_timecourse_plot_by_person(timecourse_df_response, summary, out_dir, "P2")
-    timecourse_plot_p2_path_feedback = _save_timecourse_plot_by_person(timecourse_df_feedback, summary, out_dir, "P2")
+        rows, summary = run_decoding(
+            subjects=subjects,
+            n_splits=args.n_splits,
+            n_permutations=args.n_permutations,
+            random_state=args.random_state,
+        )
+
+
+        df_decision = _to_dataframe(row["decision"] for row in rows)
+        df_response = _to_dataframe(row["response"] for row in rows)
+        df_feedback = _to_dataframe(row["feedback"] for row in rows)
+        
+        df_decision.to_csv(csv_path_decision, index=False)
+        df_response.to_csv(csv_path_response, index=False)
+        df_feedback.to_csv(csv_path_feedback, index=False)
+
+        timecourse_df_decision = _to_timecourse_dataframe(row["decision"] for row in rows)
+        timecourse_df_response = _to_timecourse_dataframe(row["response"] for row in rows)
+        timecourse_df_feedback = _to_timecourse_dataframe(row["feedback"] for row in rows)
+        
+        timecourse_df_decision.to_csv(timecourse_csv_path_decision, index=False)
+        timecourse_df_response.to_csv(timecourse_csv_path_response, index=False)
+        timecourse_df_feedback.to_csv(timecourse_csv_path_feedback, index=False)
+
+        json_path_summary.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
+    else:
+        if not (csv_path_decision.exists() and csv_path_response.exists() and csv_path_feedback.exists()):
+            raise FileNotFoundError("CSV results not found. Please run without --plot-only first.")
+        if not (timecourse_csv_path_decision.exists() and timecourse_csv_path_response.exists() and timecourse_csv_path_feedback.exists()):
+            raise FileNotFoundError("Time-course CSV results not found. Please run without --plot-only first.")
+
+        df_decision = pd.read_csv(csv_path_decision)
+        df_response = pd.read_csv(csv_path_response)
+        df_feedback = pd.read_csv(csv_path_feedback)
+        timecourse_df_decision = pd.read_csv(timecourse_csv_path_decision)
+        timecourse_df_response = pd.read_csv(timecourse_csv_path_response)
+        timecourse_df_feedback = pd.read_csv(timecourse_csv_path_feedback)
+        summary = json.loads(json_path_summary.read_text(encoding="utf-8"))
+
+    plot_path_decision = _save_accuracy_plot(df_decision, summary, out_dir, "decision")
+    plot_path_response = _save_accuracy_plot(df_response, summary, out_dir, "response")
+    plot_path_feedback = _save_accuracy_plot(df_feedback, summary, out_dir, "feedback")
+    timecourse_plot_path_decision = _save_timecourse_plot(timecourse_df_decision, summary, out_dir, "decision")
+    timecourse_plot_path_response = _save_timecourse_plot(timecourse_df_response, summary, out_dir, "response")
+    timecourse_plot_path_feedback = _save_timecourse_plot(timecourse_df_feedback, summary, out_dir, "feedback")
+    timecourse_plot_p1_path_decision = _save_timecourse_plot_by_person(timecourse_df_decision, summary, out_dir, "P1", "decision")
+    timecourse_plot_p1_path_response = _save_timecourse_plot_by_person(timecourse_df_response, summary, out_dir, "P1", "response")
+    timecourse_plot_p1_path_feedback = _save_timecourse_plot_by_person(timecourse_df_feedback, summary, out_dir, "P1", "feedback")
+    timecourse_plot_p2_path_decision = _save_timecourse_plot_by_person(timecourse_df_decision, summary, out_dir, "P2", "decision")
+    timecourse_plot_p2_path_response = _save_timecourse_plot_by_person(timecourse_df_response, summary, out_dir, "P2", "response")
+    timecourse_plot_p2_path_feedback = _save_timecourse_plot_by_person(timecourse_df_feedback, summary, out_dir, "P2", "feedback")
 
     print("\n=== Group Summary ===")
     print(f"N subject/person: {summary['n_subject_person']}")
@@ -606,7 +659,7 @@ def main() -> None:
     )
     print(f"Saved per-subject results: {csv_path_decision}, {csv_path_response}, {csv_path_feedback}")
     print(f"Saved time-course results: {timecourse_csv_path_decision}, {timecourse_csv_path_response}, {timecourse_csv_path_feedback}")
-    print(f"Saved summary: {json_path_decision}, {json_path_response}, {json_path_feedback}")
+    print(f"Saved summary: {json_path_summary}")
     print(f"Saved plot: {plot_path_decision}, {plot_path_response}, {plot_path_feedback}")
     print(f"Saved time-course plot: {timecourse_plot_path_decision}, {timecourse_plot_path_response}, {timecourse_plot_path_feedback}")
     if timecourse_plot_p1_path_decision is not None:
