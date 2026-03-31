@@ -38,6 +38,15 @@ class SanityCheckCollector:
             self.warnings.append(f"{subject_id}/{person}: {message}")
 
         self.results[subject_id][person].append(f"  {status} {message}")
+    
+    @staticmethod
+    def _console_safe(text: str) -> str:
+        return (
+            str(text)
+            .replace("✓", "[OK]")
+            .replace("⚠", "[!]")
+            .replace("✗", "[X]")
+        )
 
     def print_summary(self):
         """Print collected results in unified format."""
@@ -51,7 +60,7 @@ class SanityCheckCollector:
                 if person in self.results[subject_id]:
                     print(f"\n{person}:")
                     for msg in self.results[subject_id][person]:
-                        print(msg)
+                        print(self._console_safe(msg))
 
         print("\n" + "=" * 80)
         if self.errors:

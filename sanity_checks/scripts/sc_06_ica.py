@@ -23,6 +23,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import mne
 import numpy as np
+from mne_icalabel import label_components
 from mne.time_frequency import psd_array_welch
 
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -44,6 +45,53 @@ COLOR_GOOD = "#3498db"
 COLOR_PASSBAND = "#d8ead3"
 COLOR_STOPBAND = "#f6d6d6"
 PSD_FMAX = 60.0
+
+
+def _normalize_iclabel_name(label):
+    return str(label).strip().lower().replace("_", " ")
+
+
+def _collect_component_metadata(raw, ica):
+    artifact_labels = {_normalize_iclabel_name(label) for label in config.ICA_ARTIFACT_LABELS}
+    metadata = []
+
+    try:
+        raw_crop = raw.copy().load_data().filter(l_freq=1.0, h_freq=None).crop(tmin=0.0, tmax=min(60.0, float(raw.times[-1])))
+        label_result = label_components(raw_crop, ica, method=config.ICA_LABEL_METHOD)
+        labels = [_normalize_iclabel_name(label) for label in label_result["labels"]]
+        probabilities = [float(probability) for probability in label_result["y_pred_proba"]]
+    except Exception:
+        labels = ["unknown"] * int(ica.n_components)
+        probabilities = [float("nan")] * int(ica.n_components)
+
+    for idx in range(int(ica.n_components)):
+        label = labels[idx] if idx < len(labels) else "unknown"
+        probability = probabilities[idx] if idx < len(probabilities) else float("nan")
+        predicted_artifact = label in artifact_labels and np.isfinite(probability) and probability >= float(config.ICA_LABEL_MIN_PROBA)
+        removed = idx in set(int(component) for component in ica.exclude)
+        metadata.append(
+            {
+                "index": idx,
+                "label": label,
+                "probability": probability,
+                "removed": removed,
+                "predicted_artifact": predicted_artifact,
+            }
+        )
+    return metadata
+
+
+def _component_summary_text(component_meta, limit=5):
+    removed = [
+        f"C{item['index']} {item['label']} ({item['probability']:.2f})"
+        for item in component_meta
+        if item["removed"]
+    ]
+    if not removed:
+        return "No components excluded"
+    if len(removed) <= limit:
+        return "; ".join(removed)
+    return "; ".join(removed[:limit]) + f"; ... +{len(removed) - limit} more"
 
 
 def parse_args():
@@ -117,16 +165,16 @@ def _compute_psd(raw, duration_s, fmax=PSD_FMAX):
     return freqs, np.mean(psd, axis=0), psd, raw_eeg
 
 
-def plot_component_topomaps(ica, raw_before, subject_id, person, output_dir):
+def plot_component_topomaps(ica, raw_before, component_meta, subject_id, person, output_dir):
     """Plot topographic maps of all ICA components with bad components highlighted."""
     if ica.n_components < 1:
         return
     
-    # Organize components in a grid (4 components per row, up to 12 components shown)
-    n_comps_show = min(ica.n_components, 12)
+    # Show all fitted ICA components in a 4-column grid.
+    n_comps_show = int(ica.n_components)
     n_rows = (n_comps_show + 3) // 4
     
-    fig, axes = plt.subplots(n_rows, 4, figsize=(16, n_rows * 3.5), constrained_layout=True)
+    fig, axes = plt.subplots(n_rows, 4, figsize=(16.5, n_rows * 3.3), constrained_layout=True)
     if n_rows == 1:
         axes = axes.reshape(1, -1)
     else:
@@ -135,7 +183,10 @@ def plot_component_topomaps(ica, raw_before, subject_id, person, output_dir):
     
     for idx in range(n_comps_show):
         ax = axes[idx]
-        is_bad = idx in ica.exclude
+        meta = component_meta[idx]
+        is_bad = meta["removed"]
+        probability_text = f"p={meta['probability']:.2f}" if np.isfinite(meta["probability"]) else "p=n/a"
+        decision_text = "excluded" if is_bad else "kept"
         
         # Plot component topomap
         try:
@@ -150,9 +201,13 @@ def plot_component_topomaps(ica, raw_before, subject_id, person, output_dir):
         
         # Highlight bad components with border
         title_color = COLOR_BAD if is_bad else COLOR_GOOD
-        title_suffix = " (BAD)" if is_bad else ""
         title_weight = "bold" if is_bad else "normal"
-        ax.set_title(f"Component {idx}{title_suffix}", fontsize=11, fontweight=title_weight, color=title_color)
+        ax.set_title(
+            f"C{idx} | {meta['label']}\n{probability_text} -> {decision_text}",
+            fontsize=9.5,
+            fontweight=title_weight,
+            color=title_color,
+        )
         
         if is_bad:
             for spine in ax.spines.values():
@@ -165,9 +220,19 @@ def plot_component_topomaps(ica, raw_before, subject_id, person, output_dir):
     
     fig.suptitle(
         f"sub-{subject_id} {person} - ICA Component Topomaps\n"
-        f"Total: {ica.n_components} components | Bad (red): {len(ica.exclude)} | Good (blue): {ica.n_components - len(ica.exclude)}",
+        f"Total: {ica.n_components} components | Excluded (red): {len(ica.exclude)} | Kept (blue): {ica.n_components - len(ica.exclude)}",
         fontsize=14,
         fontweight="bold",
+    )
+    fig.text(
+        0.5,
+        0.012,
+        "Component = one independent source estimated from the mixed EEG sensors. Topomap = how strongly that source projects to each scalp channel.\n"
+        f"Reasoning rule: exclude if ICLabel predicts one of {', '.join(config.ICA_ARTIFACT_LABELS)} with p >= {float(config.ICA_LABEL_MIN_PROBA):.2f}.",
+        ha="center",
+        va="bottom",
+        fontsize=9,
+        color="#444444",
     )
     
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -177,42 +242,32 @@ def plot_component_topomaps(ica, raw_before, subject_id, person, output_dir):
     print(f"  [OK] Component topomaps saved: {plot_path.name}")
 
 
-def plot_variance_explained(ica, raw_data, subject_id, person, output_dir):
-    """Plot variance explained by each component, highlighting bad components."""
+def plot_variance_explained(ica, raw_data, component_meta, subject_id, person, output_dir):
+    """Plot relative component energy, highlighting bad components."""
     if ica.n_components < 1:
         return
     
-    # Compute explained variance - need to load a portion of raw data
+    # Estimate relative component contribution from source variance on an early crop.
     try:
-        # Load a small portion of data for variance calculation (first 60 seconds)
         raw_crop = raw_data.copy().crop(tmin=0, tmax=min(60.0, raw_data.times[-1]))
         raw_crop.load_data()
-        var_ratio_dict = ica.get_explained_variance_ratio(raw_crop)
-        
-        # Extract EEG channel variance (or combined if multiple)
-        if isinstance(var_ratio_dict, dict):
-            # Use EEG if available, otherwise use first available channel type
-            if 'eeg' in var_ratio_dict:
-                explained_var = var_ratio_dict['eeg']
-            else:
-                explained_var = list(var_ratio_dict.values())[0]
-        else:
-            explained_var = var_ratio_dict
+        sources = ica.get_sources(raw_crop).get_data()
+        explained_var = np.var(sources, axis=1)
+        explained_var = explained_var / np.sum(explained_var)
     except Exception:
-        # Fallback: estimate from component mixing matrix magnitude
         explained_var = np.abs(ica.mixing_matrix_).mean(axis=0)
         explained_var = explained_var / explained_var.sum()
     
     fig, ax = plt.subplots(figsize=(14, 6), constrained_layout=True)
     
     x = np.arange(ica.n_components)
-    colors = [COLOR_BAD if idx in ica.exclude else COLOR_GOOD for idx in range(ica.n_components)]
+    colors = [COLOR_BAD if item["removed"] else COLOR_GOOD for item in component_meta]
     
-    bars = ax.bar(x, explained_var * 100, color=colors, alpha=0.75, edgecolor="black", linewidth=1.0)
+    ax.bar(x, explained_var * 100, color=colors, alpha=0.75, edgecolor="black", linewidth=1.0)
     
     ax.set_xlabel("Component Index", fontsize=12, fontweight="bold")
-    ax.set_ylabel("Explained Variance (%)", fontsize=12, fontweight="bold")
-    ax.set_title("Variance Explained by Each ICA Component", fontsize=12, fontweight="bold")
+    ax.set_ylabel("Relative component energy (%)", fontsize=12, fontweight="bold")
+    ax.set_title("Component energy estimated from ICA sources", fontsize=12, fontweight="bold")
     ax.grid(axis="y", alpha=0.28, linestyle=":")
     ax.set_ylim(bottom=0.0)
     
@@ -223,13 +278,39 @@ def plot_variance_explained(ica, raw_data, subject_id, person, output_dir):
         Patch(facecolor=COLOR_BAD, edgecolor="black", label=f"Bad ({len(ica.exclude)})"),
     ]
     ax.legend(handles=legend_elements, fontsize=10, loc="upper right")
+
+    for item in component_meta:
+        if item["removed"]:
+            ax.text(
+                item["index"],
+                explained_var[item["index"]] * 100 + 0.35,
+                item["label"],
+                ha="center",
+                va="bottom",
+                rotation=70,
+                fontsize=8,
+                color=COLOR_BAD,
+                fontweight="bold",
+            )
     
     bad_variance = sum(explained_var[ica.exclude] * 100) if len(ica.exclude) > 0 else 0.0
     fig.suptitle(
-        f"sub-{subject_id} {person} - ICA Variance Explained\n"
-        f"Total variance: 100% | Bad components explain: {bad_variance:.1f}%",
+        f"sub-{subject_id} {person} - ICA Component Energy\n"
+        f"Relative source energy total: 100% | Excluded components account for: {bad_variance:.1f}%",
         fontsize=13,
         fontweight="bold",
+    )
+    ax.text(
+        0.01,
+        0.98,
+        "A component is one latent source recovered by ICA. Higher bars mean that source carries more variance in the ICA activations.\n"
+        "Red labels mark components excluded because ICLabel classified them as artifacts above threshold.",
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=9,
+        color="#444444",
+        bbox={"facecolor": "white", "edgecolor": "#cccccc", "alpha": 0.9, "boxstyle": "round,pad=0.4"},
     )
     
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -239,7 +320,7 @@ def plot_variance_explained(ica, raw_data, subject_id, person, output_dir):
     print(f"  [OK] Variance explained saved: {plot_path.name}")
 
 
-def plot_bad_component_timeseries(ica, raw, subject_id, person, output_dir):
+def plot_bad_component_timeseries(ica, raw, component_meta, subject_id, person, output_dir):
     """Plot time-domain signatures of bad ICA components."""
     if len(ica.exclude) == 0:
         return
@@ -270,10 +351,17 @@ def plot_bad_component_timeseries(ica, raw, subject_id, person, output_dir):
         ax = axes[plot_idx]
         component_data = sources[comp_idx, :n_samples]
         component_times = times[:n_samples]
+        meta = component_meta[int(comp_idx)]
+        probability_text = f"p={meta['probability']:.2f}" if np.isfinite(meta["probability"]) else "p=n/a"
         
         ax.plot(component_times, component_data, color=COLOR_BAD, linewidth=1.2)
         ax.axhline(0, color="#777777", linestyle="--", linewidth=0.8)
-        ax.set_title(f"Component {comp_idx}", fontsize=11, fontweight="bold", color=COLOR_BAD)
+        ax.set_title(
+            f"C{int(comp_idx)} | {meta['label']}\n{probability_text} -> excluded",
+            fontsize=10,
+            fontweight="bold",
+            color=COLOR_BAD,
+        )
         ax.set_ylabel("Amplitude (a.u.)")
         ax.grid(alpha=0.22, linestyle=":")
         
@@ -290,6 +378,15 @@ def plot_bad_component_timeseries(ica, raw, subject_id, person, output_dir):
         fontsize=13,
         fontweight="bold",
     )
+    fig.text(
+        0.5,
+        0.015,
+        "Component time series = the activation of one ICA source over time. These traces are subtracted from the sensor data when the component is excluded.",
+        ha="center",
+        va="bottom",
+        fontsize=9,
+        color="#444444",
+    )
     
     output_dir.mkdir(parents=True, exist_ok=True)
     plot_path = output_dir / f"sub-{subject_id}_{person}_ica_bad_timeseries.png"
@@ -298,7 +395,7 @@ def plot_bad_component_timeseries(ica, raw, subject_id, person, output_dir):
     print(f"  [OK] Bad component time series saved: {plot_path.name}")
 
 
-def plot_psd_comparison_ica(raw_before, raw_after, subject_id, person, duration, output_dir):
+def plot_psd_comparison_ica(raw_before, raw_after, component_meta, subject_id, person, duration, output_dir):
     """Plot PSD before and after ICA component removal."""
     freqs_before, mean_before, psd_before, raw_before_eeg = _compute_psd(raw_before, duration)
     freqs_after, mean_after, psd_after, _ = _compute_psd(raw_after, duration)
@@ -350,7 +447,7 @@ def plot_psd_comparison_ica(raw_before, raw_after, subject_id, person, duration,
     
     fig.suptitle(
         f"sub-{subject_id} {person} - ICA PSD Comparison\n"
-        f"Passband (1-40 Hz) change: {passband_change:+.1f}%",
+        f"Passband (1-40 Hz) change: {passband_change:+.1f}% | Removed: {_component_summary_text(component_meta)}",
         fontsize=13,
         fontweight="bold",
     )
@@ -398,6 +495,8 @@ def sanity_check_ica(subjects, duration):
                 collector.add_result(subject_id, person, "ERROR", f"Cannot load files: {exc}")
                 continue
 
+            component_meta = _collect_component_metadata(raw_before, ica)
+
             collector.add_result(subject_id, person, "✓", "Files exist")
             
             # Verify channel count
@@ -426,7 +525,12 @@ def sanity_check_ica(subjects, duration):
             
             # Check for removed components
             if len(ica.exclude) > 0:
-                collector.add_result(subject_id, person, "✓", f"Removed {len(ica.exclude)}/{ica.n_components} components: {ica.exclude}")
+                collector.add_result(
+                    subject_id,
+                    person,
+                    "✓",
+                    f"Removed {len(ica.exclude)}/{ica.n_components} components: {_component_summary_text(component_meta, limit=20)}",
+                )
             else:
                 collector.add_result(subject_id, person, "⚠", "No components marked for removal")
             
@@ -447,10 +551,10 @@ def sanity_check_ica(subjects, duration):
                 collector.add_result(subject_id, person, "ERROR", f"Found {nan_count} NaN and {inf_count} Inf values")
 
             print(f"\n  {person}:")
-            plot_component_topomaps(ica, raw_before, subject_id, person, config.QC_DIR)
-            plot_variance_explained(ica, raw_before, subject_id, person, config.QC_DIR)
-            plot_bad_component_timeseries(ica, raw_before, subject_id, person, config.QC_DIR)
-            plot_psd_comparison_ica(raw_before, raw_after, subject_id, person, duration, config.QC_DIR)
+            plot_component_topomaps(ica, raw_before, component_meta, subject_id, person, config.QC_DIR)
+            plot_variance_explained(ica, raw_before, component_meta, subject_id, person, config.QC_DIR)
+            plot_bad_component_timeseries(ica, raw_before, component_meta, subject_id, person, config.QC_DIR)
+            plot_psd_comparison_ica(raw_before, raw_after, component_meta, subject_id, person, duration, config.QC_DIR)
 
     collector.print_summary()
     output_csv = config.QC_DIR / "sc_06_ica_summary.csv"
