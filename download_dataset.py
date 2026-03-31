@@ -9,7 +9,7 @@ bids_root = sample.data_path(this_dir) / dataset
 bids_root.mkdir(parents=True, exist_ok=True)
 
 
-TRIAL_MODE = True  # Set to False when you are ready to download everything
+TRIAL_MODE = True  # Set to False when you want to download everything
 
 if TRIAL_MODE:
     print("Trial mode active: Downloading only 3 subjects...")

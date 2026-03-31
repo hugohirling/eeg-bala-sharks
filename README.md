@@ -1,51 +1,51 @@
-# Authors
-- Ayush Batra
-- Bahar Kalyoncu
-- Hugo Hirling
+# EEG Hyperscanning: Competitive Decision-Making (Bala Sharks)
 
-# Project Structure
-```
-EEG_Bala Sharks
-├─ eeg_pipeline/
-├─ milestones/
-├─ MNE-sample-data/
-│  └─ ds006761/
-├─ sanity_checks/
-```
-# Pipeline
-```
-Step 1 — Load & split
-Step 2 - Rename channels
-Step 3 — Filtering
-Step 4 — ICA Labeling
-Step 5 — Downsampling
-Step 6 — Epoching
-```
+**Authors:** Bahar Kalyoncu, Hugo Hirling, Ayush Batra
+**Dataset:** ds006761 (Rock-Paper-Scissors)
 
+## Project Overview
+This repository contains a EEG pipeline designed to process and analyze 64-channel hyperscanning data. Our group investigated the cognitive dynamics of adversarial, zero-sum competition by mapping brain activity temporally, spectrally, and behaviorally. 
 
-Question:
-Do I need to add positions while loading? or sometime after?
+We specifically engineered our architecture to mitigate the severe RAM bottlenecks inherent in processing dual-brain (128-channel) simultaneous recordings, ensuring the codebase can be easily reproduced on standard hardware.
 
-Question for Tutor Session:
-Should I keep the numbering for each person?
+## Installation & Reproducibility
+To ensure seamless reproducibility across different hardware environments, we have locked our software versions. We highly recommend running this within a standard Python virtual environment (Python 3.10+).
 
+1. Clone this repository.
+2. Ensure your terminal is at the root of the project.
+3. Install the exact package versions using pip:
+   ```bash
+   pip install -r requirements.txt
 
-Notes 120326 - Tutor Meeting:
-- downsample at the start! (due to memory issues)
-- merging accuracy.py with pipeline (simplyfy)
-- decode after ica removal
-- downsample to 100 or 200 Hz -> should still be clear for frequencys of interest
-- bad channel detection etc. before the output
-- cleaned data before interpreting
-- we might have uncleaned data for example if subject is blinking a lot -> output might look different than expected
-- position mapping of the renaming might be different? -> authors have some coordinates we have to check (Hugo has done some work on this) VERY IMPORTANT for the topoplots!!!!
-- rereferencing/filter: when is it good -> power spectrum plot doesn't look too different -> data doesn't get too distorted (if needed look at papers for good rereferencing/filtering)
-- ica: rejection criteria -> colorful plots a good sign (look into lecture how to interpret ica plots)
-- bad channels to clean data (some measure) further before ica even!!!
-- ica before encoding (ica is useful to remove blinks and eye movements) - for our case it matters since we use all channels to decode to clean eye movement and bad channels
-- original authors code: switched around the prefixes! (Hugo has done this in his script)
-- scope of project: add some other analysis since we drop feedback and reaction phase -> to add to report
-- try a different type of classifier was a feedback of the last tutor meeting 
+eeg-bala-sharks/
+├─ eeg_pipeline/         # Core Python scripts (preprocessing, PLV, encoding/decoding)
+├─ sanity_checks/        # Jupyter notebooks dedicated to visual diagnostic sanity checks
+├─ milestones/           # Legacy developmental checkpoints
+├─ requirements.txt      # Dependency version control
+├─ output                # Output files
+└─ README.md             # Project documentation
 
-- highly suggest adding more analysis for the scope
-- general comment: try to document a lot for the code and report (write about important things, put the sanity checks in and so on, what we find interesting, swapping labels and so on -> a year from now you need to talk about this as a basis for a report)
+## Abstracted Preprocessing Pipeline
+To mitigate memory bottlenecks and ensure data quality, our preprocessing pipeline executes the following sequential logic:
+
+1. BIDS Loading & Splitting: Isolate Player 1 and Player 2 data streams.
+2. Immediate Downsampling: Reducing the native 2048 Hz sampling rate to 200 Hz.
+3. Bad Channel Interpolation: Automated robust Z-score flagging and spherical spline interpolation to repair broken electrodes.
+4. Bandpass Filtering: 1.0 Hz - 40.0 Hz.
+5. ICA (Independent Component Analysis): Automated biological artifact rejection via mne-icalabel to remove EOG/ECG interference.
+6. Epoching: Slicing the continuous signal based on customized TSV event triggers into structured decision-making windows.
+
+## Core Methodologies
+Our analysis pipeline is divided into five distinct methodological approaches:
+
+1. Interbrain Synchrony (Phase-Locking Value): Measuring dynamic temporal coupling and shared neural states between competing pairs.
+2. Time-Resolved Decoding (Standard MVPA): Single-subject classification using Linear Discriminant Analysis (LDA) to track the neural representation of a participants own choices over the decision timeline.
+3. Advanced Neural Decoding: Extending standard decoding by introducing Temporal Generalization Matrices (TGM) to evaluate cognitive state stability, alongside Cross-Brain MVPA to test for opponent predictability.
+4. Behavioral Heuristics and Markov Modeling: Quantifying non-random human biases using transition probabilities.
+5. Time-Frequency Representations (ERSP): Utilizing complex Morlet wavelets to map Alpha-band Event-Related Desynchronization (ERD) prior to motor execution.
+
+## Executing the Analysis
+1. Place the BIDS-formatted dataset ds006761 in the structured data directory.(Option: Use the download_dataset.py file)
+2. Run the preprocessing scripts found in the codebase directory.
+3. Execute the respective decoding, PLV, TFR, and behavioral scripts. 
+4. View the sanitychecks notebooks to reproduce the intermediate visualizations and interpret the data quality.

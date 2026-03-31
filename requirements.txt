@@ -1,0 +1,13 @@
+mne==1.3.*
+mne-bids
+mne-icalabel
+onnxruntime
+autoreject
+numpy
+scipy
+pandas
+matplotlib
+seaborn
+scikit-learn
+pingouin
+rich
