@@ -57,25 +57,25 @@ class SanityCheckCollector:
         if self.errors:
             print(f"ERRORS ({len(self.errors)}):")
             for error in self.errors[:10]:
-                print(f"  ✗ {error}")
+                print(f"  [X] {error}")
             if len(self.errors) > 10:
                 print(f"  ... and {len(self.errors) - 10} more")
         if self.warnings:
             print(f"WARNINGS ({len(self.warnings)}):")
             for warning in self.warnings[:10]:
-                print(f"  ⚠ {warning}")
+                print(f"  [!] {warning}")
             if len(self.warnings) > 10:
                 print(f"  ... and {len(self.warnings) - 10} more")
 
         if not self.errors and not self.warnings:
-            print("✓ No errors or warnings detected.")
+            print("[OK] No errors or warnings detected.")
 
         print("=" * 80)
 
     def export_csv(self, output_path: Path):
         """Export summary to CSV."""
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, "w", newline="") as f:
+        with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
             writer.writerow(["Step", "Subject", "Person", "Status", "Message"])
             for subject_id in sorted(self.results.keys()):
