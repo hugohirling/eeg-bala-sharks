@@ -105,7 +105,7 @@ def load_phase_features(subject_id: str, person: str, phases: list[str]) -> dict
     if not epoch_path.exists():
         raise FileNotFoundError(f"Missing epoch file: {epoch_path}")
 
-    epochs = mne.read_epochs(str(epoch_path), preload=True, verbose=False)
+    epochs = mne.read_epochs(str(epoch_path), preload=True)
     features: dict[str, np.ndarray] = {}
     for phase in phases:
         spec = PHASE_SPECS[phase]
