@@ -113,7 +113,7 @@ AR_VERBOSE = True   # Verbose output
 ICA_N_COMPONENTS = 20
 ICA_MAX_ITER = 500
 ICA_LABEL_METHOD = "iclabel"
-ICA_LABEL_MIN_PROBA = 0.70
+ICA_LABEL_MIN_PROBA = 0.80
 ICA_ARTIFACT_LABELS = [
     "muscle artifact",
     "eye blink",
