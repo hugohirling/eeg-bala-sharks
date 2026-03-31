@@ -4,7 +4,6 @@ Classifies RPS strategies: Win-Stay, Lose-Shift, cycling patterns
 """
 
 import mne
-<<<<<<< HEAD:eeg_pipeline/08_interbrain_plv_shuffled.py
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -12,11 +11,6 @@ from collections import Counter
 import config
 import warnings
 warnings.filterwarnings('ignore')
-=======
-from mne_connectivity import spectral_connectivity_epochs
-from utils import load_raw, save_raw
-from preprocessing import config
->>>>>>> dc6ecb1d421c0c5f391dbbdca20faa14e751d79f:eeg_pipeline/archive/08_interbrain_plv_shuffled.py
 
 
 def determine_outcome(p1_move, p2_move):

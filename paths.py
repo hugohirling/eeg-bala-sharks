@@ -21,6 +21,7 @@ INPUT_DIR: Path = Path(os.environ.get("EEG_INPUT_DIR", str(_BASE / "MNE-sample-d
 # Base output folder – every pipeline component writes into a subfolder here.
 # e.g.  output/preprocessing/, output/author_code/, output/preprocessing_authors/
 OUTPUT_DIR: Path = Path(os.environ.get("EEG_OUTPUT_DIR", str(_BASE / "output")))
+# OUTPUT_DIR: Path = Path(r"D:/uni/rock_paper_scissors/output")
 
 # BioSemi 64-channel layout file used by the author_code scripts.
 BIOSEMI64_MAT: Path = Path(os.environ.get("EEG_BIOSEMI64_MAT", str(_BASE / "biosemi64.mat")))

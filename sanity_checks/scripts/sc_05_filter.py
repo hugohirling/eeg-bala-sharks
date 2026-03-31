@@ -1,16 +1,30 @@
+﻿# This file's comments were created with the help of GitHub Copilot using GPT-5.3-Codex.
 """
-Sanity Check for Step 05: Filter (Bandpass 1-40 Hz)
+Sanity Check Visualization for Step 05: Filter (Bandpass 1-40 Hz)
 
-Überprüft:
-- Filter erfolgreich angewendet
-- Frequenzband korrekt (1-40 Hz)
-- Power Spectral Density vor/nach Vergleich
-- Amplituden reduziert
+Creates verification plots for the filtering step:
+- Before/after PSD comparison with passband and stopband emphasis
+- Before/after time series of one representative EEG channel
+- Bandpower summary showing attenuation below 1 Hz and above 40 Hz
+
+Usage:
+    python sanity_checks/scripts/sc_05_filter.py [--mode check|viz|both] [--subjects 01,02] [--duration 30]
+
+Options:
+    --mode: Run textual checks, visualizations, or both
+    --subjects: Comma-separated subject IDs (default: first 2)
+    --duration: Duration in seconds used for PSD and time series (default: 30)
+
+REASONING:
+- Purpose: document why the chosen passband keeps task-relevant EEG content while attenuating slow drift and high-frequency noise.
+- Reproducibility: filter cutoffs are read from preprocessing/config.py, so the same config should reproduce the same passband/stopband checks.
+- Parameter notes: the QC figures emphasize <1 Hz, 1-40 Hz, and >40 Hz because those bands directly reflect the chosen bandpass settings.
 """
+
+import argparse
 import sys
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import mne
 import numpy as np
 
@@ -23,124 +37,139 @@ if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
 from preprocessing import config
+from plots.sc_05_filter_plots import (
+    HIGH_BAND,
+    LOW_BAND,
+    PASS_BAND,
+    band_mean as _band_mean,
+    plot_bandpower_summary,
+    plot_psd_comparison,
+    plot_timeseries_comparison,
+)
+from helpers.sc_cli import add_duration_argument, add_mode_argument, add_subjects_argument, resolve_subjects
+from helpers.sc_config import DEFAULT_PERSONS
+from helpers.sc_signal import compute_psd as _compute_psd
+from helpers.sc_utils import SanityCheckCollector, compare_amplitudes, detect_amplitude_anomaly
 
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Filter sanity check (step 05): checks and optional visualizations.",
+    )
+    add_subjects_argument(parser)
+    add_mode_argument(parser)
+    add_duration_argument(parser, default=30)
+    return parser.parse_args(argv)
 
-def sanity_check_filter():
+def sanity_check_filter(subjects, duration, run_visualizations=True):
+    collector = SanityCheckCollector("05 - Bandpass Filter (1-40 Hz)")
+    collector.set_step_context(
+        purpose="Filtering should suppress slow drift and high-frequency noise while preserving the interpretable EEG band used later in the project.",
+        reproducibility="The passband is controlled by config.FREQ_LOWER and config.FREQ_UPPER, so the same inputs and config should yield the same PSD changes.",
+        parameter_notes=[
+            f"Low cutoff = {config.FREQ_LOWER} Hz to reduce slow drifts before ICA and decoding.",
+            f"High cutoff = {config.FREQ_UPPER} Hz to keep conventional EEG content while attenuating high-frequency noise.",
+        ],
+    )
+
     print("\n" + "=" * 80)
-    print("SANITY CHECK: Step 05 - Bandpass Filter (1-40 Hz)")
+    print("VISUALIZATION: Step 05 - Filter Verification")
     print("=" * 80)
+    print(f"Subjects: {', '.join(subjects)}")
+    print(f"Duration: {duration}s")
+    print(f"Output: {config.QC_DIR}")
+    print("=" * 80 + "\n")
 
-    for subject_id in config.SUBJECTS:
-        print(f"\n--- Checking subject {subject_id} ---")
-
-        for person in ["P1", "P2"]:
+    for subject_id in subjects:
+        print(f"\n--- Subject {subject_id} ---")
+        for person in DEFAULT_PERSONS:
             before_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_interpolated.fif"
             after_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_filtered.fif"
 
             if not before_path.exists():
-                print(f"\n  {person}: Input file (interpolated) not found")
+                collector.add_result(subject_id, person, "ERROR", "Input file (interpolated) not found")
                 continue
-
             if not after_path.exists():
-                print(f"\n  {person}: Output file (filtered) not found")
+                collector.add_result(subject_id, person, "ERROR", "Output file (filtered) not found")
                 continue
 
-            raw_before = mne.io.read_raw_fif(str(before_path), preload=False)
-            raw_after = mne.io.read_raw_fif(str(after_path), preload=False)
+            try:
+                raw_before = mne.io.read_raw_fif(str(before_path), preload=False, verbose=False)
+                raw_after = mne.io.read_raw_fif(str(after_path), preload=False, verbose=False)
+            except Exception as exc:
+                collector.add_result(subject_id, person, "ERROR", f"Cannot load files: {exc}")
+                continue
 
-            print(f"\n{person}:")
-            print(f"  ✓ Files exist")
-
-            # Check metadata
+            collector.add_result(subject_id, person, "OK", "Files exist")
             if len(raw_before.ch_names) == len(raw_after.ch_names):
-                print(f"  ✓ Channel count same: {len(raw_after.ch_names)}")
+                collector.add_result(subject_id, person, "OK", f"Channel count preserved: {len(raw_after.ch_names)}")
             else:
-                print(f"  ERROR: Channel count changed")
-
+                collector.add_result(subject_id, person, "ERROR", f"Channel count mismatch: {len(raw_before.ch_names)} -> {len(raw_after.ch_names)}")
             if raw_before.info["sfreq"] == raw_after.info["sfreq"]:
-                print(f"  ✓ Sampling rate same: {raw_after.info['sfreq']} Hz")
+                collector.add_result(subject_id, person, "OK", f"Sampling rate preserved: {raw_after.info['sfreq']} Hz")
             else:
-                print(f"  ERROR: Sampling rate changed")
-
+                collector.add_result(subject_id, person, "ERROR", f"Sampling rate changed: {raw_before.info['sfreq']} -> {raw_after.info['sfreq']}")
             if raw_before.n_times == raw_after.n_times:
-                print(f"  ✓ Sample count same: {raw_after.n_times}")
+                collector.add_result(subject_id, person, "OK", f"Sample count preserved: {raw_after.n_times}")
             else:
-                print(f"  ERROR: Sample count changed")
+                collector.add_result(subject_id, person, "ERROR", f"Sample count changed: {raw_before.n_times} -> {raw_after.n_times}")
 
-            # Compare amplitudes for sanity
-            eeg_picks = mne.pick_types(raw_before.info, eeg=True)
-            if len(eeg_picks) > 0:
-                # Get a small sample for amplitude check
-                t_end = min(60, raw_before.times[-1])
-                t_idx_end = int(t_end * raw_before.info["sfreq"])
+            std_before, std_after, change_pct = compare_amplitudes(raw_before, raw_after, duration_s=60, pick_type="eeg")
+            if not (np.isnan(std_before) or np.isnan(std_after)):
+                collector.add_result(subject_id, person, "OK", f"EEG amplitude: {std_before:.2f} uV -> {std_after:.2f} uV ({change_pct:+.1f}%)")
+                anomaly = detect_amplitude_anomaly(change_pct, threshold_pct=50)
+                if anomaly:
+                    collector.add_result(subject_id, person, "WARN", anomaly)
 
-                data_before = raw_before.get_data(picks=eeg_picks[0:1], start=0, stop=t_idx_end)
-                data_after = raw_after.get_data(picks=eeg_picks[0:1], start=0, stop=t_idx_end)
+            freqs_before, mean_before, _, _ = _compute_psd(raw_before, duration)
+            freqs_after, mean_after, _, _ = _compute_psd(raw_after, duration)
+            if freqs_before is not None and freqs_after is not None:
+                low_before = _band_mean(mean_before, freqs_before, LOW_BAND)
+                low_after = _band_mean(mean_after, freqs_after, LOW_BAND)
+                pass_before = _band_mean(mean_before, freqs_before, PASS_BAND)
+                pass_after = _band_mean(mean_after, freqs_after, PASS_BAND)
+                high_before = _band_mean(mean_before, freqs_before, HIGH_BAND)
+                high_after = _band_mean(mean_after, freqs_after, HIGH_BAND)
+                if low_before > 0 and pass_before > 0 and high_before > 0:
+                    low_change = (low_after - low_before) / low_before * 100.0
+                    pass_change = (pass_after - pass_before) / pass_before * 100.0
+                    high_change = (high_after - high_before) / high_before * 100.0
+                    collector.add_result(subject_id, person, "OK", f"Bandpower change low/pass/high: {low_change:+.1f}% / {pass_change:+.1f}% / {high_change:+.1f}%")
+                    if low_change > -20.0:
+                        collector.add_result(subject_id, person, "WARN", "Weak attenuation below 1 Hz")
+                    if high_change > -20.0:
+                        collector.add_result(subject_id, person, "WARN", "Weak attenuation above 40 Hz")
 
-                std_before = np.std(data_before)
-                std_after = np.std(data_after)
+            data_after = raw_after.get_data(start=0, stop=min(10000, raw_after.n_times))
+            nan_count = int(np.isnan(data_after).sum())
+            inf_count = int(np.isinf(data_after).sum())
+            if nan_count == 0 and inf_count == 0:
+                collector.add_result(subject_id, person, "OK", "No NaN/Inf detected")
+            else:
+                collector.add_result(subject_id, person, "ERROR", f"Found {nan_count} NaN and {inf_count} Inf values")
 
-                print(f"  ✓ Sample amplitude (first channel, first 60s):")
-                print(f"    Before filter - Std: {std_before:.6f} µV")
-                print(f"    After filter - Std: {std_after:.6f} µV")
+            if run_visualizations:
+                print(f"\n  {person}:")
+                plot_psd_comparison(raw_before, raw_after, subject_id, person, duration, config.QC_DIR)
+                plot_timeseries_comparison(raw_before, raw_after, subject_id, person, duration, config.QC_DIR)
+                plot_bandpower_summary(raw_before, raw_after, subject_id, person, duration, config.QC_DIR)
 
-                if std_after < std_before:
-                    reduction_pct = (1 - std_after / std_before) * 100
-                    print(f"    Reduction: {reduction_pct:.1f}% (expected for high-frequency noise removal)")
-                else:
-                    print(f"    WARNING: Amplitude increased after filtering")
+    collector.print_summary()
+    output_csv = config.QC_DIR / "sc_05_filter_summary.csv"
+    collector.export_csv(output_csv)
+    print(f"\nOK Summary exported to {output_csv.name}\n")
 
-    # Create comparison plot for visualization
-    print(f"\n  Creating PSD comparison plot...")
-    try:
-        subject_id = config.SUBJECTS[0]
-        person = "P1"
-        before_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_interpolated.fif"
-        after_path = config.OUTPUT_DIR / f"sub-{subject_id}_{person}_filtered.fif"
 
-        if before_path.exists() and after_path.exists():
-            raw_before = mne.io.read_raw_fif(str(before_path), preload=False)
-            raw_after = mne.io.read_raw_fif(str(after_path), preload=False)
-
-            fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
-            # VORHER
-            raw_before_eeg = raw_before.copy().pick_types(eeg=True)
-            raw_before_eeg.plot_psd(fmax=60, ax=axes[0], show=False)
-            axes[0].axvline(
-                x=config.FREQ_LOWER, color="red", linestyle="--", label=f"Filter: {config.FREQ_LOWER} Hz"
-            )
-            axes[0].axvline(
-                x=config.FREQ_UPPER, color="red", linestyle="--", label=f"Filter: {config.FREQ_UPPER} Hz"
-            )
-            axes[0].set_title("BEFORE: Power Spectral Density")
-            axes[0].legend()
-
-            # NACHHER
-            raw_after_eeg = raw_after.copy().pick_types(eeg=True)
-            raw_after_eeg.plot_psd(fmax=60, ax=axes[1], show=False)
-            axes[1].axvline(
-                x=config.FREQ_LOWER, color="red", linestyle="--", label=f"Filter: {config.FREQ_LOWER} Hz"
-            )
-            axes[1].axvline(
-                x=config.FREQ_UPPER, color="red", linestyle="--", label=f"Filter: {config.FREQ_UPPER} Hz"
-            )
-            axes[1].set_title(f"AFTER: PSD (Filtered {config.FREQ_LOWER}-{config.FREQ_UPPER} Hz)")
-            axes[1].legend()
-
-            plt.tight_layout()
-            plot_path = config.QC_DIR / f"sub-{subject_id}_{person}_filter_psd_comparison.png"
-            plt.savefig(plot_path, dpi=100, bbox_inches="tight")
-            print(f"  ✓ Plot saved: {plot_path.name}")
-            plt.close()
-    except Exception as e:
-        print(f"  Could not save plot: {e}")
-
-    print("\n" + "=" * 80)
-    print("Sanity check completed.")
-    print("=" * 80)
+def main(argv=None):
+    args = parse_args(argv)
+    mode = args.mode
+    subjects = resolve_subjects(args.subjects, config.SUBJECTS, mode=mode)
+    run_visualizations = mode in ("viz", "both")
+    sanity_check_filter(subjects, args.duration, run_visualizations=run_visualizations)
 
 
 if __name__ == "__main__":
-    sanity_check_filter()
+    main()
+
+
+
 

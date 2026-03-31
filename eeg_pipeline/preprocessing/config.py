@@ -16,6 +16,8 @@ import paths as _project_paths  # noqa: E402
 BIDS_ROOT = _project_paths.INPUT_DIR
 OUTPUT_DIR = _project_paths.OUTPUT_DIR / "preprocessing"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+QC_DIR = _project_paths.OUTPUT_DIR / "sanity_checks"
+QC_DIR.mkdir(parents=True, exist_ok=True)
 BIOSEMI64_MAT_PATH = _project_paths.BIOSEMI64_MAT
 
 
@@ -72,15 +74,22 @@ PLAYER_PREFIX_MAP = {
     "P2": "1-",
 }
 
-# Optional TSV with bad-channel annotations.
-# Leave as None to skip manual interpolation lists.
-BAD_CHANNELS_FILE = None
+# Optional TSV with bad-channel annotations from the BIDS dataset.
+# Set to None to disable manual bad-channel lists.
+BAD_CHANNELS_FILE = BIDS_ROOT / "participants.tsv"
 
 # Automatic bad-channel detection (robust z-score on channel STD).
 BAD_CHANNEL_ZSCORE_THRESHOLD = 4.0
 BAD_CHANNEL_FLAT_STD_THRESHOLD = 1e-12
-QC_DIR = BASE_DIR / "output" / "qc"
+# Parallel workers for step 03 (subject-level parallelism).
+# Keep at 1 for conservative I/O; increase to 2-4 on fast SSDs.
+BAD_CHANNEL_N_JOBS = 4
+BAD_CHANNELS_DIR = OUTPUT_DIR / "bad_channels"
+BAD_CHANNELS_DIR.mkdir(parents=True, exist_ok=True)
+QC_DIR = OUTPUT_DIR / "sanity_checks"
 QC_DIR.mkdir(parents=True, exist_ok=True)
+ICA_DIR = OUTPUT_DIR / "ica"
+ICA_DIR.mkdir(parents=True, exist_ok=True)
 
 # Epoching
 MAX_EPOCHS = 500
@@ -103,6 +112,15 @@ AR_VERBOSE = True   # Verbose output
 # ICA
 ICA_N_COMPONENTS = 20
 ICA_MAX_ITER = 500
+ICA_LABEL_METHOD = "iclabel"
+ICA_LABEL_MIN_PROBA = 0.70
+ICA_ARTIFACT_LABELS = [
+    "muscle artifact",
+    "eye blink",
+    "heart beat",
+    "line noise",
+    "channel noise",
+]
 
 # Saving format
 SAVE_FORMAT = "fif"  # MNE Standard
@@ -179,8 +197,8 @@ channel_labels = {
 }
 
 channel_types = {
-    "Erg1": "eog",
-    "Erg2": "eog",
+    "Erg1": "bio",
+    "Erg2": "bio",
     "Resp": "resp",
     "Plet": "misc",
     "Temp": "temperature",
