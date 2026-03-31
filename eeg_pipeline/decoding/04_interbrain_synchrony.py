@@ -155,6 +155,7 @@ def _load_pair_decision_epochs(subject_id: str, tmin: float, tmax: float) -> tup
 
     Returns:
         tuple[mne.Epochs, mne.Epochs]: Trial-aligned EEG epochs for P1 and P2.
+        Only shared EEG channels with names starting with A or B are retained.
 
     Raises:
         FileNotFoundError: If epoch files are missing.
@@ -177,9 +178,14 @@ def _load_pair_decision_epochs(subject_id: str, tmin: float, tmax: float) -> tup
     p1_epochs.pick("eeg")
     p2_epochs.pick("eeg")
 
-    common_channels = [name for name in p1_epochs.ch_names if name in set(p2_epochs.ch_names)]
+    p2_channel_set = set(p2_epochs.ch_names)
+    common_channels = [
+        name
+        for name in p1_epochs.ch_names
+        if name in p2_channel_set and str(name).upper().startswith(("A", "B"))
+    ]
     if not common_channels:
-        raise RuntimeError(f"No common EEG channels for sub-{subject_id}")
+        raise RuntimeError(f"No common EEG channels with A/B prefix for sub-{subject_id}")
 
     p1_epochs = p1_epochs.copy().pick(common_channels)
     p2_epochs = p2_epochs.copy().pick(common_channels)
